@@ -33,8 +33,11 @@ DockGlass {
   function refresh() {
     if (!root.folderPath) return
     root.loading = true
+    if (lister.running) { lister.rerun = true; return }
     lister.buffer = []
-    lister.running = false
+    // Set the command here rather than binding it: a binding may not have
+    // re-evaluated yet when this runs from onFolderPathChanged.
+    lister.command = ["find", root.folderPath, "-mindepth", "1", "-maxdepth", "1", "-not", "-name", ".*", "-printf", "%T@\t%y\t%f\n"]
     lister.running = true
   }
   onFolderPathChanged: if (visible) refresh()
@@ -43,8 +46,8 @@ DockGlass {
   Process {
     id: lister
     property var buffer: []
+    property bool rerun: false
     // %T@ mtime, %y type, %f name; newest first, hidden entries skipped.
-    command: ["find", root.folderPath, "-mindepth", "1", "-maxdepth", "1", "-not", "-name", ".*", "-printf", "%T@\t%y\t%f\n"]
     stdout: SplitParser {
       onRead: function(line) {
         var parts = String(line).split("\t")
@@ -56,6 +59,7 @@ DockGlass {
       var rows = lister.buffer.slice().sort(function(a, b) { return b.t - a.t }).slice(0, root.limit)
       root.entries = rows.map(function(r) { return { name: r.name, isDir: r.isDir, path: root.folderPath + "/" + r.name } })
       root.loading = false
+      if (lister.rerun) { lister.rerun = false; root.refresh() }
     }
   }
 

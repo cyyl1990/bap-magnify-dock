@@ -6,6 +6,13 @@ previews, a built-in app drawer, and a settings card for everything.
 
 ![Magnify Dock](preview.png)
 
+| | |
+|---|---|
+| ![Magnification wave, badge, folder and trash tiles](screenshots/dock.png) | ![Live window previews](screenshots/previews.png) |
+| ![Folder stack](screenshots/folder.png) | ![App drawer](screenshots/drawer.png) |
+
+![Settings](screenshots/settings.png)
+
 This is a redesigned fork of
 [wisangdg/omarchy-magnify-dock](https://github.com/wisangdg/omarchy-magnify-dock).
 The magnification physics and window tracking come from upstream; the visual
@@ -104,6 +111,16 @@ omarchy-shell magnify-dock deletePreset "Work"
 Applying a preset from a keybind works the same way as the drawer binding,
 for example `o.bind("SUPER + SHIFT + D", "Dock: work preset", "omarchy-shell magnify-dock preset Work")`.
 
+## Removal
+
+```bash
+omarchy plugin remove marcho78.magnify-dock
+```
+
+Your pins, settings and presets stay in `~/.config/omarchy/dock-pinned-macos.json`
+and `dock-presets.json`; delete those two files if you want a clean slate.
+Remove the drawer keybind from `bindings.lua` if you added one.
+
 ## Requirements
 
 * Omarchy with omarchy-shell (Quickshell) and Hyprland.
@@ -115,6 +132,14 @@ for example `o.bind("SUPER + SHIFT + D", "Dock: work preset", "omarchy-shell mag
 
 The plugin makes no network requests. It bundles the Instrument Sans font
 (SIL Open Font License, see `fonts/OFL.txt`).
+
+Everything it runs: `hyprctl` (window focus and close), `uwsm-app`/`gtk-launch`
+(launching apps), `xdg-open` (folders and the trash), `gio trash --empty`
+(only from the trash tile's menu), `pactl` through `dock-audio.py` (mute),
+`python3 dock-badges.py` (a session-bus listener that never writes anything),
+`find` (folder stack listing), `wl-copy` (copying from settings) and
+`gsettings` (reads the reduce-motion preference). It writes only to the two
+config files above, and only on your actions.
 
 ## Notes
 
