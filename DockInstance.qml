@@ -566,6 +566,96 @@ Item {
     }
   }
 
+  // Presets: named snapshots of the whole configuration (settings, auto-hide,
+  // reserve space, pinned apps) kept in their own file so the live config
+  // stays small and a preset survives edits to it.
+  readonly property string presetsPath: Quickshell.env("HOME") + "/.config/omarchy/dock-presets.json"
+  property var presets: []
+
+  FileView {
+    id: presetsFileView
+    path: root.presetsPath
+    watchChanges: true
+    onFileChanged: reload()
+    printErrors: false
+    onLoaded: root.loadPresets(text())
+    onLoadFailed: root.loadPresets("")
+  }
+
+  function loadPresets(rawText) {
+    var list = []
+    try {
+      if (rawText && rawText.trim().length > 0) {
+        var parsed = JSON.parse(rawText)
+        var arr = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.presets) ? parsed.presets : [])
+        for (var i = 0; i < arr.length; i++) {
+          var p = arr[i]
+          if (p && typeof p.name === "string" && p.name.trim() !== "" && p.settings && typeof p.settings === "object") list.push(p)
+        }
+      }
+    } catch (e) {}
+    root.presets = list
+  }
+
+  function writePresets(list) {
+    root.presets = list
+    var jsonStr = JSON.stringify({ version: 1, presets: list }, null, 2)
+    if (Util && typeof Util.execDetached === "function") {
+      var tmpPath = root.presetsPath + ".tmp." + Date.now()
+      var cmd = "printf '%s\\n' " + Util.shellQuote(jsonStr) + " > " + Util.shellQuote(tmpPath) + " && mv " + Util.shellQuote(tmpPath) + " " + Util.shellQuote(root.presetsPath)
+      Util.execDetached(cmd)
+    }
+  }
+
+  function findPreset(name) {
+    var key = String(name || "").trim().toLowerCase()
+    for (var i = 0; i < root.presets.length; i++) {
+      if (String(root.presets[i].name).trim().toLowerCase() === key) return i
+    }
+    return -1
+  }
+
+  function savePreset(name) {
+    var clean = String(name || "").trim()
+    if (clean === "") return false
+    var entry = {
+      name: clean,
+      savedAt: new Date().toISOString(),
+      settings: root.preferences,
+      autoHide: root.autoHide,
+      reserveSpace: root.reserveSpace,
+      pinned: Array.isArray(root.customPinnedApps) ? root.customPinnedApps : DockModel.defaultPinnedApps
+    }
+    var list = root.presets.slice()
+    var idx = root.findPreset(clean)
+    if (idx >= 0) list[idx] = entry; else list.push(entry)
+    root.writePresets(list)
+    return true
+  }
+
+  function applyPreset(name) {
+    var idx = root.findPreset(name)
+    if (idx < 0) return false
+    var p = root.presets[idx]
+    settingsSaveTimer.stop()
+    root.preferences = DockModel.normalizeSettings(p.settings)
+    if (typeof p.autoHide === "boolean") root.autoHide = p.autoHide
+    if (typeof p.reserveSpace === "boolean") root.reserveSpace = p.reserveSpace
+    if (Array.isArray(p.pinned)) root.customPinnedApps = p.pinned
+    root.saveConfig()
+    root.rebuildDock()
+    return true
+  }
+
+  function deletePreset(name) {
+    var idx = root.findPreset(name)
+    if (idx < 0) return false
+    var list = root.presets.slice()
+    list.splice(idx, 1)
+    root.writePresets(list)
+    return true
+  }
+
   function togglePinApp(appId) {
     if (!appId) return
     var currentList = Array.isArray(root.customPinnedApps)
@@ -1034,6 +1124,10 @@ Item {
     function drawer(): string { root.toggleDrawer(); return appDrawer.open ? "open" : "closed" }
     function settings(): string { if (root.settingsOpen) root.closeSettings(); else root.openSettings(); return root.settingsOpen ? "open" : "closed" }
     function autoHide(): string { root.autoHide = !root.autoHide; root.saveConfig(); return root.autoHide ? "on" : "off" }
+    function preset(name: string): string { return root.applyPreset(name) ? "applied" : "no such preset" }
+    function savePreset(name: string): string { return root.savePreset(name) ? "saved" : "name required" }
+    function deletePreset(name: string): string { return root.deletePreset(name) ? "deleted" : "no such preset" }
+    function presets(): string { return JSON.stringify(root.presets.map(function(p) { return p.name })) }
     function status(): string {
       return JSON.stringify({ screen: root.dockScreen ? root.dockScreen.name : "", pinned: root.dockData.pinned.length, running: root.dockData.unpinned.length, autoHide: root.autoHide, reserveSpace: root.reserveSpace, drawer: appDrawer.open, settings: root.settingsOpen, opacitySetting: root.preferences.opacity, surfaceAlpha: root.surfaceAlpha, dockHovered: root.isDockHovered })
     }
@@ -1098,7 +1192,9 @@ Item {
 
     WlrLayershell.namespace: "omarchy-dock"
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // Settings hold a text field (preset name); give the layer the keyboard
+    // on demand only while the card is open so the dock never steals focus otherwise.
+    WlrLayershell.keyboardFocus: root.settingsOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     
     // Reserve bottom space so Hyprland windows stop cleanly above the dock
     exclusionMode: root.reserveSpace && !root.autoHide
@@ -1250,6 +1346,10 @@ Item {
         onPreferenceChanged: function(key, value) { root.changePreference(key, value) }
         onAutoHideToggled: { root.autoHide = !root.autoHide; root.saveConfig() }
         onReserveSpaceToggled: { root.reserveSpace = !root.reserveSpace; root.saveConfig() }
+        presets: root.presets
+        onPresetSaved: function(name) { root.savePreset(name) }
+        onPresetApplied: function(name) { root.applyPreset(name) }
+        onPresetDeleted: function(name) { root.deletePreset(name) }
         onDismissed: root.closeSettings()
       }
     }

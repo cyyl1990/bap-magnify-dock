@@ -23,6 +23,10 @@ DockGlass {
   signal autoHideToggled()
   signal reserveSpaceToggled()
   signal dismissed()
+  property var presets: []
+  signal presetSaved(string name)
+  signal presetApplied(string name)
+  signal presetDeleted(string name)
 
   open: visible
   width: Math.round(340 * Math.max(1, Math.min(1.25, textScale)))
@@ -517,6 +521,178 @@ DockGlass {
             }
           }
         }
+
+        // Presets
+        Text {
+          text: "PRESETS"
+          font.family: root.fontFamily
+          font.pixelSize: Math.round(10 * root.textScale)
+          font.weight: Font.DemiBold
+          font.letterSpacing: 1.3
+          color: root.w(0.38)
+          topPadding: 18
+          bottomPadding: 4
+        }
+        Text {
+          width: column.width - 36
+          wrapMode: Text.WordWrap
+          text: "Save everything above plus your pinned apps under a name, and restore it later."
+          font.family: root.fontFamily
+          font.pixelSize: Math.round(12 * root.textScale)
+          color: root.w(0.42)
+          bottomPadding: 10
+        }
+        Row {
+          width: column.width - 36
+          spacing: 8
+          Rectangle {
+            id: nameBox
+            width: parent.width - saveButton.width - 8
+            height: Math.round(34 * root.textScale)
+            radius: 9
+            color: root.w(0.08)
+            border.width: 1
+            border.color: nameInput.activeFocus ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.7) : root.w(0.10)
+            MouseArea { anchors.fill: parent; onClicked: nameInput.forceActiveFocus() }
+            TextInput {
+              id: nameInput
+              anchors.fill: parent
+              anchors.leftMargin: 11
+              anchors.rightMargin: 11
+              verticalAlignment: TextInput.AlignVCenter
+              font.family: root.fontFamily
+              font.pixelSize: Math.round(13 * root.textScale)
+              color: "#ffffff"
+              selectionColor: Qt.rgba(1, 1, 1, 0.25)
+              clip: true
+              maximumLength: 40
+              Keys.onReturnPressed: saveButton.save()
+              Keys.onEnterPressed: saveButton.save()
+              Text {
+                visible: nameInput.text.length === 0
+                anchors.fill: parent
+                verticalAlignment: Text.AlignVCenter
+                text: "Preset name"
+                font: nameInput.font
+                color: root.w(0.35)
+              }
+            }
+          }
+          Rectangle {
+            id: saveButton
+            readonly property bool ready: nameInput.text.trim().length > 0
+            function save() {
+              if (!ready) return
+              root.presetSaved(nameInput.text.trim())
+              nameInput.text = ""
+            }
+            width: saveLabel.implicitWidth + 26
+            height: nameBox.height
+            radius: 9
+            color: ready ? (saveMouse.containsMouse ? Qt.lighter(root.accent, 1.15) : root.accent) : root.w(0.10)
+            Text {
+              id: saveLabel
+              anchors.centerIn: parent
+              text: "Save"
+              font.family: root.fontFamily
+              font.pixelSize: Math.round(12.5 * root.textScale)
+              font.weight: Font.DemiBold
+              color: saveButton.ready ? "#ffffff" : root.w(0.4)
+            }
+            MouseArea {
+              id: saveMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: saveButton.ready ? Qt.PointingHandCursor : Qt.ArrowCursor
+              onClicked: saveButton.save()
+            }
+          }
+        }
+        Item { width: 1; height: 8 }
+        Text {
+          visible: root.presets.length === 0
+          text: "No presets saved yet."
+          font.family: root.fontFamily
+          font.pixelSize: Math.round(12 * root.textScale)
+          color: root.w(0.35)
+          bottomPadding: 4
+        }
+        Repeater {
+          model: root.presets
+          delegate: Rectangle {
+            id: presetRow
+            required property var modelData
+            width: column.width - 36
+            height: Math.round(40 * root.textScale)
+            radius: 9
+            color: presetHover.hovered ? root.w(0.07) : "transparent"
+            HoverHandler { id: presetHover }
+            Text {
+              anchors.left: parent.left
+              anchors.leftMargin: 10
+              anchors.right: applyButton.left
+              anchors.rightMargin: 8
+              anchors.verticalCenter: parent.verticalCenter
+              text: presetRow.modelData.name
+              elide: Text.ElideRight
+              textFormat: Text.PlainText
+              font.family: root.fontFamily
+              font.pixelSize: Math.round(13 * root.textScale)
+              font.weight: Font.Medium
+              color: root.w(0.88)
+            }
+            Rectangle {
+              id: applyButton
+              anchors.right: deleteButton.left
+              anchors.rightMargin: 6
+              anchors.verticalCenter: parent.verticalCenter
+              width: applyLabel.implicitWidth + 20
+              height: Math.round(26 * root.textScale)
+              radius: 7
+              color: applyMouse.containsMouse ? root.w(0.18) : root.w(0.11)
+              Text {
+                id: applyLabel
+                anchors.centerIn: parent
+                text: "Apply"
+                font.family: root.fontFamily
+                font.pixelSize: Math.round(12 * root.textScale)
+                font.weight: Font.Medium
+                color: "#ffffff"
+              }
+              MouseArea {
+                id: applyMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.presetApplied(presetRow.modelData.name)
+              }
+            }
+            Rectangle {
+              id: deleteButton
+              anchors.right: parent.right
+              anchors.rightMargin: 6
+              anchors.verticalCenter: parent.verticalCenter
+              width: Math.round(26 * root.textScale)
+              height: width
+              radius: 7
+              color: deleteMouse.containsMouse ? Qt.rgba(1, 0.35, 0.35, 0.28) : "transparent"
+              Text {
+                anchors.centerIn: parent
+                text: "×"
+                font.family: root.fontFamily
+                font.pixelSize: Math.round(15 * root.textScale)
+                color: deleteMouse.containsMouse ? "#ffffff" : root.w(0.5)
+              }
+              MouseArea {
+                id: deleteMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.presetDeleted(presetRow.modelData.name)
+              }
+            }
+          }
+        }
         Item { width: 1; height: 6 }
       }
 
@@ -533,7 +709,7 @@ DockGlass {
         topPadding: 10
         bottomPadding: 14
         wrapMode: Text.WordWrap
-        text: "Changes apply live and save to dock-pinned-macos.json"
+        text: "Changes apply live and save to dock-pinned-macos.json. Presets live in dock-presets.json."
         font.family: root.fontFamily
         font.pixelSize: Math.round(11 * root.textScale)
         color: root.w(0.35)

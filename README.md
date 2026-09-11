@@ -70,6 +70,12 @@ value.
 **Behavior**: auto-hide, reserve space, window previews, recent apps, dock
 background, collapse control.
 
+**Presets**: type a name and press **Save** to snapshot the whole
+configuration (every setting above, auto-hide, reserve space, and the pinned
+apps). **Apply** restores a snapshot, × deletes it. Saving under an existing
+name overwrites it. Presets are stored in `~/.config/omarchy/dock-presets.json`,
+separate from the live config, so you can copy that file to another machine.
+
 ## IPC
 
 ```bash
@@ -77,7 +83,14 @@ omarchy-shell magnify-dock drawer     # toggle the app drawer
 omarchy-shell magnify-dock settings   # toggle the settings card
 omarchy-shell magnify-dock autoHide   # toggle auto-hide
 omarchy-shell magnify-dock status     # JSON state
+omarchy-shell magnify-dock presets    # names of saved presets
+omarchy-shell magnify-dock savePreset "Work"
+omarchy-shell magnify-dock preset "Work"        # apply
+omarchy-shell magnify-dock deletePreset "Work"
 ```
+
+Applying a preset from a keybind works the same way as the drawer binding,
+for example `o.bind("SUPER + SHIFT + D", "Dock: work preset", "omarchy-shell magnify-dock preset Work")`.
 
 ## Requirements
 
