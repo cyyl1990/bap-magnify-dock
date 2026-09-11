@@ -43,14 +43,14 @@ Item {
     border.width: 1
     border.color: Qt.rgba(1, 1, 1, 0.13)
 
+    // Inset edge light that follows the rounded shape.
     Rectangle {
-      anchors.top: parent.top
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.margins: 1
-      height: 1
+      anchors.fill: parent
       radius: root.radius
-      color: Qt.rgba(1, 1, 1, 0.09)
+      gradient: Gradient {
+      GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.09) }
+      GradientStop { position: 0.06; color: "transparent" }
+      }
     }
   }
 

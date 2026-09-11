@@ -71,20 +71,16 @@ Item {
       GradientStop { position: 1.0; color: root.hovered ? Qt.lighter(root.tileBottom, 1.08) : root.tileBottom }
     }
 
-    // inset highlights: top light, bottom dark
+    // Inset edge light that follows the rounded shape.
     Rectangle {
-      anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
-      anchors.margins: 1
-      height: 1
+      anchors.fill: parent
       radius: parent.radius
-      color: Qt.rgba(1, 1, 1, 0.32)
-    }
-    Rectangle {
-      anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
-      anchors.margins: 1
-      height: 1
-      radius: parent.radius
-      color: Qt.rgba(0, 0, 0, 0.18)
+      gradient: Gradient {
+      GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.32) }
+      GradientStop { position: 0.06; color: "transparent" }
+      GradientStop { position: 0.94; color: "transparent" }
+      GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.18) }
+      }
     }
 
     Image {

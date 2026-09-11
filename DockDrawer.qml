@@ -84,14 +84,14 @@ PanelWindow {
       border.width: 1
       border.color: Qt.rgba(1, 1, 1, 0.14)
 
+      // Inset edge light that follows the rounded shape.
       Rectangle {
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.margins: 1
-        height: 1
+        anchors.fill: parent
         radius: 14
-        color: Qt.rgba(1, 1, 1, 0.10)
+        gradient: Gradient {
+        GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.10) }
+        GradientStop { position: 0.06; color: "transparent" }
+        }
       }
 
       MouseArea { anchors.fill: parent; onClicked: searchInput.forceActiveFocus() }

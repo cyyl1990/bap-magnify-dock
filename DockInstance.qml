@@ -1243,14 +1243,14 @@ Item {
       border.color: Qt.rgba(1, 1, 1, 0.13)
       border.width: 1
 
+      // Inset edge light that follows the rounded shape.
       Rectangle {
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.margins: 1
-        height: 1
+        anchors.fill: parent
         radius: 19
-        color: Qt.rgba(1, 1, 1, 0.14)
+        gradient: Gradient {
+        GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.14) }
+        GradientStop { position: 0.06; color: "transparent" }
+        }
       }
 
       // Main Items Content Row
@@ -1286,14 +1286,14 @@ Item {
               }
               border.width: 0
 
+              // Inset edge light that follows the rounded shape.
               Rectangle {
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.margins: 1
-                height: 1
+                anchors.fill: parent
                 radius: parent.radius
-                color: Qt.rgba(1, 1, 1, 0.28)
+                gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.28) }
+                GradientStop { position: 0.06; color: "transparent" }
+                }
               }
 
               Grid {
