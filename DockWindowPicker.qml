@@ -24,9 +24,9 @@ DockGlass {
   signal windowClosed(var win)
   signal dismissed()
 
-  readonly property int cardSize: Math.round(196 * textScale)      // square thumbnail box
+  readonly property int cardSize: Math.round(220 * textScale)      // square thumbnail box
   readonly property int cardW: cardSize + 16
-  readonly property int cardH: cardSize + Math.round(46 * textScale) + 16
+  readonly property int cardH: cardSize + Math.round(42 * textScale) + 14
   readonly property int cardGap: 8
 
   open: visible
@@ -92,12 +92,17 @@ DockGlass {
         height: root.cardSize
         radius: 8
         color: Qt.rgba(0, 0, 0, 0.35)
+        // Cover-fit: scale the window to fill the square and crop the excess,
+        // so the preview occupies the whole box instead of a letterboxed strip.
         ScreencopyView {
+          id: capture
           anchors.centerIn: parent
           captureSource: card.modelData.window
           live: root.visible
           paintCursor: false
-          constraintSize: Qt.size(root.cardSize, root.cardSize)
+          readonly property real aspect: sourceSize.height > 0 ? sourceSize.width / sourceSize.height : 1
+          width: aspect >= 1 ? Math.round(root.cardSize * aspect) : root.cardSize
+          height: aspect >= 1 ? root.cardSize : Math.round(root.cardSize / aspect)
         }
       }
 
