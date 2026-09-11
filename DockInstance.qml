@@ -996,7 +996,12 @@ Item {
     appDrawer.close()
   }
 
+  property double drawerToggledAt: 0
   function toggleDrawer() {
+    // A press that opens the drawer must not be read again as a close.
+    var now = Date.now()
+    if (now - root.drawerToggledAt < 250) return
+    root.drawerToggledAt = now
     if (appDrawer.open) { appDrawer.close(); return }
     root.closeContextMenu()
     root.closePicker()
