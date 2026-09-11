@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "id": "wdg.dock",
-  "name": "macOS Magnify Dock",
-  "version": "1.7.0",
-  "author": "wdg",
+  "id": "marcho78.magnify-dock",
+  "name": "Magnify Dock",
+  "version": "2.0.0",
+  "author": "marcho78",
   "license": "MIT",
-  "description": "Authentic macOS-style floating dock for Omarchy featuring pointer-coupled magnification wave, launch bounce animation, drag-and-drop reordering, and auto-hide.",
+  "description": "Frosted-glass macOS-style dock for Omarchy: pointer magnification wave, launch bounce, drag reordering, window picker, built-in app drawer, and auto-hide. Redesigned fork of wdg.dock.",
   "kinds": [
     "panel"
   ],

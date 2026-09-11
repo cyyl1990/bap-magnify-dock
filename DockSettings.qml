@@ -1,112 +1,340 @@
-pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import qs.Commons
 
-Rectangle {
+// Settings card, per the design: 340px glass, "Dock Settings" header with a
+// close control, Appearance sliders, a segmented "Windows shown" control,
+// Behavior switches, and a footer noting where settings are saved.
+DockGlass {
   id: root
-  property var settings: ({})
-  property real maxHeight: 620
-  signal preferenceChanged(string key, var value)
-  signal dismissed()
-  width: 340
-  height: Math.min(maxHeight, settingsColumn.implicitHeight + 28)
-  radius: 12
-  color: Util.alpha(Color.background, 0.98)
-  border.color: Util.alpha(Color.foreground, 0.2)
 
-  ScrollView {
+  property var settings: ({})
+  property bool isAutoHide: false
+  property bool isReserveSpace: true
+  property real maxHeight: 620
+  property color accent: Color.accent
+  property string fontFamily: Style.font.family
+  readonly property real textScale: settings && settings.textScale ? settings.textScale : 1
+
+  signal preferenceChanged(string key, var value)
+  signal autoHideToggled()
+  signal reserveSpaceToggled()
+  signal dismissed()
+
+  open: visible
+  width: 340
+  height: Math.min(maxHeight, flick.contentHeight)
+
+  function w(a) { return Qt.rgba(1, 1, 1, a) }
+
+  Flickable {
+    id: flick
     anchors.fill: parent
-    anchors.margins: 14
-    contentWidth: availableWidth
+    contentHeight: column.implicitHeight
     clip: true
-    ColumnLayout {
-      id: settingsColumn
-      width: parent.width
-      spacing: 10
-      RowLayout {
-        Layout.fillWidth: true
+    boundsBehavior: Flickable.StopAtBounds
+    ScrollBar.vertical: ScrollBar { policy: flick.contentHeight > flick.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff }
+
+    Column {
+      id: column
+      width: flick.width
+      spacing: 0
+
+      // Header
+      Item {
+        width: parent.width
+        height: 44
         Text {
+          anchors.left: parent.left
+          anchors.leftMargin: 18
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.verticalCenterOffset: 4
           text: "Dock Settings"
-          color: Color.foreground
-          font.bold: true
-          font.pixelSize: 16
-          Layout.fillWidth: true
+          font.family: root.fontFamily
+          font.pixelSize: 15
+          font.weight: Font.DemiBold
+          color: "#ffffff"
         }
-        Button {
-          text: "Done"
-          Accessible.name: "Close dock settings"
-          onClicked: root.dismissed()
-        }
-      }
-      Text {
-        text: "Changes preview immediately and save automatically."
-        color: Color.foreground
-        opacity: 0.7
-        wrapMode: Text.WordWrap
-        Layout.fillWidth: true
-        font.pixelSize: 12
-      }
-      Repeater {
-        model: [
-          { key: "iconSize", label: "Icon size", min: 24, max: 64, step: 1, unit: " px" },
-          { key: "magnification", label: "Magnification", min: 1, max: 2, step: 0.05, unit: "×" },
-          { key: "spacing", label: "Icon spacing", min: 2, max: 16, step: 1, unit: " px" },
-          { key: "opacity", label: "Background opacity", min: 0.2, max: 1, step: 0.05, unit: "%" },
-          { key: "revealDelay", label: "Reveal delay", min: 0, max: 1000, step: 50, unit: " ms" },
-          { key: "hideDelay", label: "Hide delay", min: 100, max: 2000, step: 50, unit: " ms" }
-        ]
-        delegate: ColumnLayout {
-          id: settingRow
-          required property var modelData
-          Layout.fillWidth: true
-          spacing: 0
-          RowLayout {
-            Layout.fillWidth: true
-            Text {
-              text: settingRow.modelData.label
-              color: Color.foreground
-              Layout.fillWidth: true
-            }
-            Text {
-              text: (settingRow.modelData.key === "opacity"
-                ? Math.round(control.value * 100)
-                : Math.round(control.value * 100) / 100) + settingRow.modelData.unit
-              color: Color.foreground
-            }
+        Rectangle {
+          anchors.right: parent.right
+          anchors.rightMargin: 18
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.verticalCenterOffset: 4
+          width: 24
+          height: 24
+          radius: 8
+          color: closeMouse.containsMouse ? root.w(0.12) : "transparent"
+          Text {
+            anchors.centerIn: parent
+            text: "×"
+            font.family: root.fontFamily
+            font.pixelSize: 16
+            color: closeMouse.containsMouse ? "#ffffff" : root.w(0.55)
           }
-          Slider {
-            id: control
-            objectName: settingRow.modelData.key
-            Layout.fillWidth: true
-            from: settingRow.modelData.min
-            to: settingRow.modelData.max
-            stepSize: settingRow.modelData.step
-            value: root.settings[settingRow.modelData.key]
-            Accessible.name: settingRow.modelData.label
-            onMoved: root.preferenceChanged(settingRow.modelData.key, value)
+          MouseArea {
+            id: closeMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.dismissed()
           }
         }
       }
-      Text { text: "Show running windows from"; color: Color.foreground }
-      ComboBox {
-        objectName: "windowScope"
-        Layout.fillWidth: true
-        model: ["All monitors and workspaces", "This monitor", "Active workspace on this monitor"]
-        currentIndex: ["all", "monitor", "workspace"].indexOf(root.settings.windowScope)
-        Accessible.name: "Running window filter"
-        onActivated: function(index) {
-          root.preferenceChanged("windowScope", ["all", "monitor", "workspace"][index])
+
+      // Appearance
+      Column {
+        width: parent.width
+        leftPadding: 18
+        rightPadding: 18
+        topPadding: 8
+        spacing: 0
+
+        Text {
+          text: "APPEARANCE"
+          font.family: root.fontFamily
+          font.pixelSize: 10
+          font.weight: Font.DemiBold
+          font.letterSpacing: 1.3
+          color: root.w(0.38)
+          topPadding: 8
+          bottomPadding: 2
         }
+
+        Repeater {
+          model: [
+            { key: "iconSize", label: "Icon size", min: 24, max: 64, step: 1, fmt: "px" },
+            { key: "magnification", label: "Magnification", min: 1, max: 2, step: 0.05, fmt: "x" },
+            { key: "spacing", label: "Spacing", min: 2, max: 16, step: 1, fmt: "px" },
+            { key: "opacity", label: "Background opacity", min: 0.2, max: 1, step: 0.02, fmt: "%" },
+            { key: "textScale", label: "Text size", min: 0.85, max: 1.3, step: 0.05, fmt: "%" }
+          ]
+          delegate: Column {
+            id: settingRow
+            required property var modelData
+            width: column.width - 36
+            topPadding: 9
+            bottomPadding: 2
+            spacing: 7
+
+            function display(v) {
+              var f = settingRow.modelData.fmt
+              if (f === "%") return Math.round(v * 100) + "%"
+              if (f === "x") return "×" + Number(v).toFixed(2)
+              return Math.round(v) + " px"
+            }
+
+            Item {
+              width: parent.width
+              height: 14
+              Text {
+                anchors.left: parent.left
+                anchors.baseline: parent.bottom
+                text: settingRow.modelData.label
+                font.family: root.fontFamily
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                color: root.w(0.85)
+              }
+              Text {
+                anchors.right: parent.right
+                anchors.baseline: parent.bottom
+                text: settingRow.display(control.value)
+                font.family: root.fontFamily
+                font.pixelSize: 12
+                font.weight: Font.Medium
+                color: root.w(0.5)
+              }
+            }
+
+            Slider {
+              id: control
+              objectName: settingRow.modelData.key
+              width: parent.width
+              height: 20
+              from: settingRow.modelData.min
+              to: settingRow.modelData.max
+              stepSize: settingRow.modelData.step
+              value: root.settings[settingRow.modelData.key]
+              Accessible.name: settingRow.modelData.label
+              onMoved: root.preferenceChanged(settingRow.modelData.key, value)
+
+              background: Rectangle {
+                x: control.leftPadding
+                y: control.topPadding + control.availableHeight / 2 - height / 2
+                width: control.availableWidth
+                height: 4
+                radius: 2
+                color: root.w(0.16)
+                Rectangle {
+                  width: control.visualPosition * parent.width
+                  height: parent.height
+                  radius: 2
+                  color: root.w(0.45)
+                }
+              }
+              handle: Rectangle {
+                x: control.leftPadding + control.visualPosition * (control.availableWidth - width)
+                y: control.topPadding + control.availableHeight / 2 - height / 2
+                width: 15
+                height: 15
+                radius: 7.5
+                color: "#ffffff"
+                border.width: 0
+              }
+            }
+          }
+        }
+
+        // Windows shown
+        Text {
+          text: "WINDOWS SHOWN"
+          font.family: root.fontFamily
+          font.pixelSize: 10
+          font.weight: Font.DemiBold
+          font.letterSpacing: 1.3
+          color: root.w(0.38)
+          topPadding: 18
+          bottomPadding: 10
+        }
+        Rectangle {
+          width: column.width - 36
+          height: 34
+          radius: 9
+          color: root.w(0.08)
+          Row {
+            anchors.fill: parent
+            anchors.margins: 3
+            spacing: 0
+            Repeater {
+              model: [
+                { id: "all", label: "All" },
+                { id: "monitor", label: "This monitor" },
+                { id: "workspace", label: "Workspace" }
+              ]
+              delegate: Rectangle {
+                id: seg
+                required property var modelData
+                readonly property bool selected: root.settings.windowScope === modelData.id
+                width: (parent.width) / 3
+                height: parent.height
+                radius: 7
+                color: selected ? root.w(0.16) : (segMouse.containsMouse ? root.w(0.06) : "transparent")
+                Text {
+                  anchors.centerIn: parent
+                  text: seg.modelData.label
+                  font.family: root.fontFamily
+                  font.pixelSize: 12
+                  font.weight: Font.Medium
+                  color: seg.selected ? "#ffffff" : root.w(0.55)
+                }
+                MouseArea {
+                  id: segMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.preferenceChanged("windowScope", seg.modelData.id)
+                }
+              }
+            }
+          }
+        }
+
+        // Behavior
+        Text {
+          text: "BEHAVIOR"
+          font.family: root.fontFamily
+          font.pixelSize: 10
+          font.weight: Font.DemiBold
+          font.letterSpacing: 1.3
+          color: root.w(0.38)
+          topPadding: 18
+          bottomPadding: 4
+        }
+        Repeater {
+          model: [
+            { key: "autoHide", label: "Auto-hide", sub: "Slide off-screen; reveal at the bottom edge" },
+            { key: "reserveSpace", label: "Reserve space", sub: "Tiled windows stop above the dock" }
+          ]
+          delegate: Item {
+            id: toggleRow
+            required property var modelData
+            readonly property bool on: modelData.key === "autoHide" ? root.isAutoHide : root.isReserveSpace
+            width: column.width - 36
+            height: 50
+
+            Column {
+              anchors.left: parent.left
+              anchors.right: track.left
+              anchors.rightMargin: 12
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: 2
+              Text {
+                text: toggleRow.modelData.label
+                font.family: root.fontFamily
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                color: root.w(0.85)
+              }
+              Text {
+                width: parent.width
+                text: toggleRow.modelData.sub
+                wrapMode: Text.WordWrap
+                font.family: root.fontFamily
+                font.pixelSize: 12
+                color: root.w(0.42)
+              }
+            }
+
+            Rectangle {
+              id: track
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              width: 40
+              height: 24
+              radius: 12
+              color: toggleRow.on ? root.accent : root.w(0.16)
+              Behavior on color { ColorAnimation { duration: 180 } }
+              Rectangle {
+                x: toggleRow.on ? 19 : 3
+                y: 3
+                width: 18
+                height: 18
+                radius: 9
+                color: "#ffffff"
+                Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+              }
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                if (toggleRow.modelData.key === "autoHide") root.autoHideToggled()
+                else root.reserveSpaceToggled()
+              }
+            }
+          }
+        }
+        Item { width: 1; height: 6 }
+      }
+
+      // Footer
+      Rectangle {
+        width: parent.width
+        height: 1
+        color: root.w(0.08)
       }
       Text {
-        text: "Pinned apps remain available in every mode. Reveal and hide delays apply when Auto-hide is enabled."
-        color: Color.foreground
-        opacity: 0.7
+        width: parent.width
+        leftPadding: 18
+        rightPadding: 18
+        topPadding: 10
+        bottomPadding: 14
         wrapMode: Text.WordWrap
-        Layout.fillWidth: true
-        font.pixelSize: 12
+        text: "Changes apply live and save to dock-pinned-macos.json"
+        font.family: root.fontFamily
+        font.pixelSize: 11
+        color: root.w(0.35)
       }
     }
   }

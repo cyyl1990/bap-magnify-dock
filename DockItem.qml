@@ -20,6 +20,8 @@ Item {
   property bool isDockHovered: false
   property bool isHovered: false
   property bool reduceMotion: false
+  property color accent: Color.accent
+  property string fontFamily: Style.font.family
   property real bounceY: 0
   property real pressScale: (mouseArea.pressed && !root.isBeingDragged) ? 0.94 : 1.0
 
@@ -121,19 +123,20 @@ Item {
   SequentialAnimation {
     id: launchAnimation
     loops: Animation.Infinite
+    // Design: dockBounce 0.55s, up 26px by 40%, settle by 70%.
     NumberAnimation {
       target: root
       property: "bounceY"
-      to: -13
-      duration: 135
+      to: -26
+      duration: 220
       easing.type: Easing.OutCubic
     }
     NumberAnimation {
       target: root
       property: "bounceY"
       to: 0
-      duration: 165
-      easing.type: Easing.InCubic
+      duration: 330
+      easing.type: Easing.InOutCubic
     }
   }
 
@@ -166,40 +169,14 @@ Item {
       y: (root.isBeingDragged || root.dragVisualY !== 0) ? root.dragVisualY : root.bounceY
     }
 
-    // Subtle elevation shadow when dragged
-    Rectangle {
-      visible: root.dragLiftScale > 1.02
-      opacity: Math.min(1.0, (root.dragLiftScale - 1.0) / 0.16)
-      anchors.centerIn: parent
-      anchors.verticalCenterOffset: 6
-      width: parent.width * 0.9
-      height: parent.height * 0.9
-      radius: 12
-      color: Util.alpha("#000000", 0.35)
-      z: -1
-    }
-
-    // App Icon Image
-    Image {
-      id: iconImage
+    DockTile {
+      id: iconTile
       anchors.fill: parent
-      fillMode: Image.PreserveAspectFit
-      source: root.resolveIcon(root.appIcon)
-      sourceSize.width: Math.round(root.iconSize * 2 * Screen.devicePixelRatio)
-      sourceSize.height: Math.round(root.iconSize * 2 * Screen.devicePixelRatio)
-      asynchronous: true
-      smooth: true
-      mipmap: true
-
-      // Fallback placeholder if icon missing
-      Text {
-        visible: iconImage.status !== Image.Ready
-        anchors.centerIn: parent
-        text: root.appName.length > 0 ? root.appName.charAt(0).toUpperCase() : "★"
-        font.pixelSize: 16
-        font.bold: true
-        color: Color.foreground
-      }
+      size: root.iconSize
+      iconSource: root.resolveIcon(root.appIcon)
+      appName: root.appName
+      fontFamily: root.fontFamily
+      hovered: root.isHovered
     }
 
     // Keep hit-testing aligned with the transformed icon. Opening the context
@@ -293,12 +270,23 @@ Item {
     id: indicatorContainer
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.bottom: parent.bottom
-    anchors.bottomMargin: 1
+    anchors.bottomMargin: -1
     width: 6
-    height: 4
+    height: 5
     transform: Translate {
       // Follow the icon's displacement while retaining the fixed-size running indicator
       x: root.isBeingDragged ? root.dragVisualX : root.animatedOffsetX
+    }
+
+    // Glow behind the dot (design: 0 0 6px of the dot color).
+    Rectangle {
+      anchors.centerIn: parent
+      visible: runningIndicator.visible
+      opacity: runningIndicator.opacity * 0.35
+      width: runningIndicator.width + 8
+      height: width
+      radius: width / 2
+      color: runningIndicator.color
     }
 
     Rectangle {
@@ -307,12 +295,10 @@ Item {
       anchors.centerIn: parent
       opacity: root.isRunning ? 1 : 0
       scale: root.isRunning ? 1 : 0.6
-      width: 4
-      height: 4
-      radius: 2
-      color: root.isFocused
-        ? Util.alpha(Color.foreground, 0.95)
-        : Util.alpha(Color.foreground, 0.72)
+      width: root.isFocused ? 5 : 4
+      height: width
+      radius: width / 2
+      color: root.isFocused ? root.accent : Qt.rgba(1, 1, 1, 0.75)
 
       Behavior on opacity {
         NumberAnimation { duration: root.reduceMotion ? 0 : 140; easing.type: Easing.OutCubic }

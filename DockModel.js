@@ -1,16 +1,20 @@
 // DockModel.js - Core logic for macOS-style dock in Omarchy
 
 var defaultSettings = {
-  iconSize: 34, magnification: 1.6, spacing: 6, opacity: 0.76,
+  iconSize: 38, magnification: 1.7, spacing: 8, opacity: 0.72, textScale: 1,
   revealDelay: 0, hideDelay: 220, windowScope: "all"
 };
+
+// Layout constants from the Magnify Dock design.
+var railPadding = 12;      // horizontal inset of the first/last slot
+var separatorWidth = 17;   // width reserved for a divider between groups
 
 function normalizeSettings(input) {
   input = input && typeof input === "object" ? input : {};
   var result = {};
   var ranges = {
     iconSize: [24, 64], magnification: [1, 2], spacing: [2, 16],
-    opacity: [0.2, 1], revealDelay: [0, 1000], hideDelay: [100, 2000]
+    opacity: [0.2, 1], textScale: [0.85, 1.3], revealDelay: [0, 1000], hideDelay: [100, 2000]
   };
   for (var key in ranges) {
     var value = input[key];
@@ -457,9 +461,10 @@ function computeMagnifiedOffsets(scales, baseSize, expansionRatio) {
 }
 
 // Calculate fixed unmagnified baseline coordinates
-function computeBaselineCenters(baseSize, spacing, pad, pinnedCount, unpinnedCount) {
+function computeBaselineCenters(baseSize, spacing, pad, pinnedCount, unpinnedCount, sepWidth) {
   var curX = pad;
-  var sepWidth = 7;
+  // A divider occupies its own width plus one spacing gap on its far side.
+  sepWidth = (typeof sepWidth === "number" ? sepWidth : separatorWidth) + spacing;
 
   // Applications launcher and its following separator
   var launcherCenter = curX + baseSize / 2;
@@ -492,4 +497,39 @@ function computeBaselineCenters(baseSize, spacing, pad, pinnedCount, unpinnedCou
     unpinned: unpinnedCenters,
     totalBaseWidth: totalBaseWidth
   };
+}
+
+// ---------- app drawer ----------
+
+function drawerApps(desktopEntries, appLibrary, Quickshell, query) {
+  var q = String(query || "").trim().toLowerCase();
+  var apps = desktopEntries && desktopEntries.applications ? toArray(desktopEntries.applications.values) : [];
+  var out = [];
+  for (var i = 0; i < apps.length; i++) {
+    var e = apps[i];
+    if (!e || e.noDisplay) continue;
+    var name = String(e.name || "");
+    if (!name) continue;
+    if (q) {
+      var hay = (name + " " + String(e.genericName || "") + " " + String(e.comment || "")).toLowerCase();
+      if (hay.indexOf(q) < 0) continue;
+    }
+    out.push({
+      id: e.id,
+      name: name,
+      icon: resolveIcon(e.icon, appLibrary, Quickshell),
+      desktopEntry: e,
+      isRunning: false,
+      windows: []
+    });
+  }
+  out.sort(function(a, b) {
+    var an = a.name.toLowerCase(), bn = b.name.toLowerCase();
+    if (q) {
+      var ap = an.indexOf(q) === 0 ? 0 : 1, bp = bn.indexOf(q) === 0 ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+    }
+    return an < bn ? -1 : an > bn ? 1 : 0;
+  });
+  return out;
 }

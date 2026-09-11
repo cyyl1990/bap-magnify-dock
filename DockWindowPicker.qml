@@ -1,96 +1,142 @@
-pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import qs.Commons
 
-Rectangle {
+// Window list for an app, per the design: 280px glass card, uppercase
+// "APP — N WINDOWS" title, rows with an activity dot, title, location, and a
+// close control that appears on hover.
+DockGlass {
   id: root
+
   property string title: ""
   property var rows: []
   property real maxHeight: 420
+  property real textScale: 1
+  property string fontFamily: Style.font.family
+  property color accent: Color.accent
   readonly property bool containsPointer: hover.hovered
+
   signal windowActivated(var win)
   signal windowClosed(var win)
   signal dismissed()
-  width: 350
-  height: Math.min(maxHeight, 54 + rows.length * 62)
-  radius: 12
-  color: Util.alpha(Color.background, 0.98)
-  border.color: Util.alpha(Color.foreground, 0.2)
+
+  open: visible
+  width: 280
+  height: Math.min(maxHeight, header.height + list.contentHeight + 12)
+
   HoverHandler { id: hover }
 
-  RowLayout {
+  Text {
     id: header
-    x: 12
-    y: 6
-    width: parent.width - 24
-    height: 36
-    Text {
-      text: root.title + " · " + root.rows.length
-      color: Color.foreground
-      font.bold: true
-      elide: Text.ElideRight
-      Layout.fillWidth: true
-    }
-    ToolButton {
-      text: "×"
-      Accessible.name: "Dismiss window picker"
-      onClicked: root.dismissed()
-    }
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: parent.top
+    leftPadding: 14
+    rightPadding: 14
+    topPadding: 10
+    bottomPadding: 6
+    elide: Text.ElideRight
+    text: (root.title + " — " + root.rows.length + (root.rows.length === 1 ? " window" : " windows")).toUpperCase()
+    font.family: root.fontFamily
+    font.pixelSize: Math.round(11 * root.textScale)
+    font.weight: Font.DemiBold
+    font.letterSpacing: 1.1
+    color: Qt.rgba(1, 1, 1, 0.4)
   }
+
   ListView {
-    anchors { top: header.bottom; bottom: parent.bottom; left: parent.left; right: parent.right; margins: 6 }
+    id: list
+    anchors { top: header.bottom; left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: 7 }
     clip: true
     model: root.rows
-    spacing: 4
-    ScrollBar.vertical: ScrollBar {}
-    delegate: RowLayout {
+    spacing: 0
+    boundsBehavior: Flickable.StopAtBounds
+    ScrollBar.vertical: ScrollBar { policy: list.contentHeight > list.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff }
+
+    delegate: Item {
       id: windowRow
       required property var modelData
-      width: ListView.view.width
-      height: 58
-      spacing: 4
-      Button {
-        id: focusButton
-        objectName: "focusWindow"
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        Accessible.name: "Focus " + windowRow.modelData.title
-        onClicked: root.windowActivated(windowRow.modelData.window)
-        background: Rectangle {
-          radius: 6
-          color: focusButton.hovered || windowRow.modelData.active
-            ? Util.alpha(Color.accent, 0.2) : "transparent"
+      width: list.width
+      height: Math.round(48 * root.textScale)
+
+      Rectangle {
+        anchors.fill: parent
+        anchors.leftMargin: 5
+        anchors.rightMargin: 5
+        radius: 9
+        color: rowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.09) : "transparent"
+
+        Rectangle {
+          id: dot
+          anchors.left: parent.left
+          anchors.leftMargin: 12
+          anchors.verticalCenter: parent.verticalCenter
+          width: 6
+          height: 6
+          radius: 3
+          color: windowRow.modelData.active ? root.accent : Qt.rgba(1, 1, 1, 0.25)
         }
-        contentItem: Column {
-          spacing: 3
+
+        Column {
+          anchors.left: dot.right
+          anchors.leftMargin: 10
+          anchors.right: closeButton.left
+          anchors.rightMargin: 8
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: 1
           Text {
             width: parent.width
             text: windowRow.modelData.title
             elide: Text.ElideRight
             textFormat: Text.PlainText
-            color: Color.foreground
-            font.bold: windowRow.modelData.active
+            font.family: root.fontFamily
+            font.pixelSize: Math.round(13.5 * root.textScale)
+            font.weight: Font.Medium
+            color: Qt.rgba(1, 1, 1, 0.94)
           }
           Text {
             width: parent.width
             text: windowRow.modelData.location
             elide: Text.ElideRight
             textFormat: Text.PlainText
-            color: Color.foreground
-            opacity: 0.65
-            font.pixelSize: 11
+            font.family: root.fontFamily
+            font.pixelSize: Math.round(11.5 * root.textScale)
+            color: Qt.rgba(1, 1, 1, 0.45)
           }
         }
-      }
-      ToolButton {
-        objectName: "closeWindow"
-        text: "×"
-        Accessible.name: "Close " + windowRow.modelData.title
-        ToolTip.visible: hovered
-        ToolTip.text: "Close window"
-        onClicked: root.windowClosed(windowRow.modelData.window)
+
+        MouseArea {
+          id: rowMouse
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.windowActivated(windowRow.modelData.window)
+        }
+
+        Rectangle {
+          id: closeButton
+          anchors.right: parent.right
+          anchors.rightMargin: 8
+          anchors.verticalCenter: parent.verticalCenter
+          width: 22
+          height: 22
+          radius: 6
+          color: closeMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : "transparent"
+          Text {
+            anchors.centerIn: parent
+            text: "×"
+            font.family: root.fontFamily
+            font.pixelSize: 15
+            color: closeMouse.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.5)
+          }
+          MouseArea {
+            id: closeMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.windowClosed(windowRow.modelData.window)
+          }
+        }
       }
     }
   }

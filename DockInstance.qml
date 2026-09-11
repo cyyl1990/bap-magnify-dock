@@ -19,17 +19,26 @@ Item {
   property var dockScreen: null
   property var appLibrary: shell ? shell.appLibrary : null
 
-  // Sleek macOS Dock Dimensions & Spacing
+  // Geometry from the Magnify Dock design: 12px rail inset, rail height of
+  // icon + 26, 17px dividers, magnification radius of 3.4 icon widths.
   property var preferences: DockModel.normalizeSettings(null)
   property real baseIconSize: root.iconPixelSize + 8
   property real iconPixelSize: root.preferences.iconSize
   property real maxMagnification: root.preferences.magnification
-  property real magnifyRadius: 140
-  property real dockPadding: 8
+  property real magnifyRadius: root.iconPixelSize * 3.4
+  property real dockPadding: DockModel.railPadding
+  property real separatorWidth: DockModel.separatorWidth
   property real itemSpacing: root.preferences.spacing
-  property real capsuleHeight: root.baseIconSize + root.dockPadding * 2
+  property real capsuleHeight: root.iconPixelSize + 26
+  property real dockEdgeMargin: 14
   property real layoutExpansionRatio: 0.82
-  property int magnificationDuration: 55
+  property int magnificationDuration: 90
+  readonly property real textScale: root.preferences.textScale || 1
+  readonly property color accent: Color.accent
+  readonly property string pluginDir: Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "").replace(/\/$/, "")
+  // Instrument Sans (OFL) ships with the plugin; fall back to the shell font.
+  FontLoader { id: dockFont; source: Qt.resolvedUrl("fonts/InstrumentSans.ttf") }
+  readonly property string fontFamily: dockFont.status === FontLoader.Ready ? dockFont.name : Style.font.family
 
   readonly property bool environmentReduceMotion: {
     var value = String(Quickshell.env("OMARCHY_REDUCE_MOTION") || "").toLowerCase()
@@ -56,7 +65,7 @@ Item {
   property real pickerAnchorY: 0
   readonly property var hyprMonitor: root.dockScreen ? Hyprland.monitorFor(root.dockScreen) : null
   readonly property var activeWorkspace: root.hyprMonitor ? root.hyprMonitor.activeWorkspace : null
-  readonly property bool popupOpen: root.contextMenuOpen || root.pickerOpen || root.settingsOpen
+  readonly property bool popupOpen: root.contextMenuOpen || root.pickerOpen || root.settingsOpen || appDrawer.open
 
   onActiveWorkspaceChanged: Qt.callLater(root.rebuildDock)
   onHyprMonitorChanged: Qt.callLater(root.rebuildDock)
@@ -390,7 +399,7 @@ Item {
 
   // Muted Apps State Persistence & Audio Control
   readonly property string mutedAppsPath: Quickshell.env("HOME") + "/.config/omarchy/dock-muted-apps.json"
-  readonly property string dockAudioScript: Quickshell.env("HOME") + "/.config/omarchy/plugins/wdg.dock/dock-audio.py"
+  readonly property string dockAudioScript: root.pluginDir + "/dock-audio.py"
   property var mutedAppsMap: ({})
 
   FileView {
@@ -577,7 +586,8 @@ Item {
       root.itemSpacing,
       root.dockPadding,
       pCount,
-      uCount
+      uCount,
+      root.separatorWidth
     )
 
     updateMagnification()
@@ -844,8 +854,40 @@ Item {
     function onAppsChanged() { root.rebuildDock() }
   }
 
+  function toggleDrawer() {
+    if (appDrawer.open) { appDrawer.close(); return }
+    root.closeContextMenu()
+    root.closePicker()
+    root.clearTooltip()
+    root.settingsOpen = false
+    root.revealDock()
+    appDrawer.open = true
+  }
+
+  // `omarchy-shell magnify-dock drawer` toggles the app drawer (bind it to a
+  // key); `settings` opens the settings card; `status` reports state.
+  IpcHandler {
+    target: "magnify-dock"
+    function drawer(): string { root.toggleDrawer(); return appDrawer.open ? "open" : "closed" }
+    function settings(): string { if (root.settingsOpen) root.closeSettings(); else root.openSettings(); return root.settingsOpen ? "open" : "closed" }
+    function autoHide(): string { root.autoHide = !root.autoHide; root.saveConfig(); return root.autoHide ? "on" : "off" }
+    function status(): string {
+      return JSON.stringify({ screen: root.dockScreen ? root.dockScreen.name : "", pinned: root.dockData.pinned.length, running: root.dockData.unpinned.length, autoHide: root.autoHide, reserveSpace: root.reserveSpace, drawer: appDrawer.open, settings: root.settingsOpen })
+    }
+  }
+
+  DockDrawer {
+    id: appDrawer
+    dockScreen: root.dockScreen
+    appLibrary: root.appLibrary
+    textScale: root.textScale
+    fontFamily: root.fontFamily
+    backdropOpacity: root.preferences.opacity
+    onDrawerClosed: root.scheduleDockHide()
+  }
+
   Component.onCompleted: {
-    console.log("macOS dock instance ready", root.dockScreen ? root.dockScreen.name : "no-screen")
+    console.log("Magnify Dock instance ready", root.dockScreen ? root.dockScreen.name : "no-screen")
     if (root.appLibrary) root.appLibrary.refreshIcons()
     root.rebuildDock()
   }
@@ -868,8 +910,9 @@ Item {
 
     implicitWidth: 0
     implicitHeight: root.capsuleHeight
+      + root.dockEdgeMargin
       + Math.ceil(root.iconPixelSize * (root.maxMagnification - 1.0))
-      + 16
+      + 24
     color: "transparent"
 
     WlrLayershell.namespace: "omarchy-dock"
@@ -880,7 +923,7 @@ Item {
     exclusionMode: root.reserveSpace && !root.autoHide
       ? ExclusionMode.Normal
       : ExclusionMode.Ignore
-    exclusiveZone: root.capsuleHeight + 10
+    exclusiveZone: root.capsuleHeight + root.dockEdgeMargin + 6
 
     // Single dynamic hit area bound directly to mask so Quickshell updates
     // the Wayland input region on geometry changes without nested region issues.
@@ -892,7 +935,7 @@ Item {
         ? (dockCapsule.width + Math.ceil(root.iconPixelSize * (root.maxMagnification - 1.0) * 2) + 8)
         : (root.autoHide ? (dockCapsule.width + 160) : 0)
       height: (!root.autoHide || root.dockPresented)
-        ? (root.capsuleHeight + Math.ceil(root.iconPixelSize * (root.maxMagnification - 1.0)) + 14)
+        ? (root.capsuleHeight + root.dockEdgeMargin + Math.ceil(root.iconPixelSize * (root.maxMagnification - 1.0)) + 14)
         : (root.autoHide ? 4 : 0)
     }
 
@@ -925,7 +968,7 @@ Item {
           try {
             var targetOffset = Number(target.animatedOffsetX || 0)
             var localX = target.width / 2 - tooltipWindow.implicitWidth / 2 + targetOffset
-            var localY = -tooltipWindow.implicitHeight - 10
+            var localY = -tooltipWindow.implicitHeight - Math.ceil(root.iconPixelSize * (root.maxMagnification - 1.0)) - 12
             var point = dockPanel.contentItem.mapFromItem(target, localX, localY)
             tooltipWindow.anchor.rect.x = Math.round(point.x)
             tooltipWindow.anchor.rect.y = Math.round(point.y)
@@ -935,21 +978,21 @@ Item {
 
       Rectangle {
         id: tooltipBubble
-        implicitWidth: tooltipLabel.implicitWidth + 18
+        implicitWidth: tooltipLabel.implicitWidth + 22
         implicitHeight: tooltipLabel.implicitHeight + 10
-        radius: 7
-        color: Util.alpha(Color.background, 0.94)
-        border.color: Util.alpha(Color.foreground, 0.2)
+        radius: 8
+        color: Qt.rgba(24 / 255, 26 / 255, 33 / 255, Math.max(0.9, root.preferences.opacity))
+        border.color: Qt.rgba(1, 1, 1, 0.13)
         border.width: 1
 
         Text {
           id: tooltipLabel
           anchors.centerIn: parent
           text: root.tooltipText
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
-          color: Color.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Math.round(12.5 * root.textScale)
+          font.weight: Font.Medium
+          color: Qt.rgba(1, 1, 1, 0.95)
         }
       }
     }
@@ -974,6 +1017,10 @@ Item {
         id: windowPicker
         title: root.pickerTitle
         rows: root.windowRows
+        textScale: root.textScale
+        accent: root.accent
+        fontFamily: root.fontFamily
+        glassOpacity: root.preferences.opacity
         maxHeight: Math.max(120, (root.dockScreen ? root.dockScreen.height : 720) - dockPanel.height - 32)
         onContainsPointerChanged: {
           if (containsPointer) pickerHideTimer.stop()
@@ -1007,8 +1054,15 @@ Item {
       DockSettings {
         id: settingsPanel
         settings: root.preferences
+        isAutoHide: root.autoHide
+        isReserveSpace: root.reserveSpace
+        accent: root.accent
+        fontFamily: root.fontFamily
+        glassOpacity: root.preferences.opacity
         maxHeight: Math.max(180, (root.dockScreen ? root.dockScreen.height : 720) - dockPanel.height - 32)
         onPreferenceChanged: function(key, value) { root.changePreference(key, value) }
+        onAutoHideToggled: { root.autoHide = !root.autoHide; root.saveConfig() }
+        onReserveSpaceToggled: { root.reserveSpace = !root.reserveSpace; root.saveConfig() }
         onDismissed: root.closeSettings()
       }
     }
@@ -1046,9 +1100,10 @@ Item {
         id: dockContextMenu
         targetItem: root.contextTarget
         isOpen: root.contextMenuOpen
-        isAutoHide: root.autoHide
-        isReserveSpace: root.reserveSpace
         isAudioMuted: root.isAppAudioMuted(root.contextTarget)
+        textScale: root.textScale
+        fontFamily: root.fontFamily
+        glassOpacity: root.preferences.opacity
 
         onLaunchClicked: function(item) {
           DockModel.handleItemClick(item, Util, root.appLibrary, DesktopEntries)
@@ -1061,14 +1116,6 @@ Item {
         }
         onMuteAudioToggled: function(item) {
           root.toggleAppAudio(item)
-        }
-        onAutoHideToggled: {
-          root.autoHide = !root.autoHide
-          root.saveConfig()
-        }
-        onReserveSpaceToggled: {
-          root.reserveSpace = !root.reserveSpace
-          root.saveConfig()
         }
         onSettingsRequested: root.openSettings()
         onMenuClosed: root.closeContextMenu()
@@ -1148,40 +1195,61 @@ Item {
         }
       }
 
-      // macOS Frosted Glass Dock Capsule
+      // Soft drop shadow under the capsule (design: 0 14px 44px rgba(0,0,0,0.45)).
+      Rectangle {
+        id: capsuleShadowSource
+        anchors.fill: dockCapsule
+        radius: dockCapsule.radius
+        color: Qt.rgba(0, 0, 0, 0.45)
+        visible: false
+      }
+      MultiEffect {
+        anchors.fill: capsuleShadowSource
+        anchors.topMargin: 10
+        source: capsuleShadowSource
+        blurEnabled: true
+        blur: 1.0
+        blurMax: 40
+        autoPaddingEnabled: true
+        z: -1
+        transform: Translate { y: capsuleSlide.y }
+      }
+
+      // Frosted glass capsule (design tokens: rgba(18,20,26,opacity), 19px
+      // radius, 1px white/13% border, white/14% top highlight).
       Rectangle {
         id: dockCapsule
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 4
+        anchors.bottomMargin: root.dockEdgeMargin
 
       height: root.capsuleHeight
       width: contentRow.width + root.dockPadding * 2 + root.animatedExtraCapsuleWidth
-      radius: 18
+      radius: 19
       transform: Translate {
-        y: root.autoHide && !root.dockPresented ? root.capsuleHeight + 8 : 0
+        id: capsuleSlide
+        y: root.autoHide && !root.dockPresented ? root.capsuleHeight + 30 : 0
         Behavior on y {
           NumberAnimation {
-            duration: root.reduceMotion ? 0 : 80
-            easing.type: Easing.OutCubic
+            duration: root.reduceMotion ? 0 : 320
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: [0.3, 0.8, 0.3, 1, 1, 1]
           }
         }
       }
 
-      // Frosted Glass Appearance matching Omarchy theme
-      color: Util.alpha(Color.background, root.preferences.opacity)
-      border.color: Util.alpha(Color.foreground, 0.16)
+      color: Qt.rgba(18 / 255, 20 / 255, 26 / 255, root.preferences.opacity)
+      border.color: Qt.rgba(1, 1, 1, 0.13)
       border.width: 1
 
-      // Top Specular Highlight for 3D glass effect
       Rectangle {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: 1
         height: 1
-        radius: 18
-        color: Util.alpha("#ffffff", 0.16)
+        radius: 19
+        color: Qt.rgba(1, 1, 1, 0.14)
       }
 
       // Main Items Content Row
@@ -1207,19 +1275,40 @@ Item {
             scale: root.animatedLauncherScale
             transform: Translate { x: root.animatedLauncherOffsetX }
 
+            // Launcher tile: white glass gradient, 24% radius, 3×3 dot grid.
             Rectangle {
               anchors.fill: parent
-              radius: 10
-              color: launcherMouse.containsMouse
-                ? Util.alpha(Color.accent, 0.25)
-                : Util.alpha(Color.foreground, 0.08)
+              radius: Math.round(root.iconPixelSize * 0.24)
+              gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, launcherMouse.containsMouse || appDrawer.open ? 0.28 : 0.2) }
+                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, launcherMouse.containsMouse || appDrawer.open ? 0.16 : 0.1) }
+              }
+              border.width: 0
 
-              Text {
+              Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: 1
+                height: 1
+                radius: parent.radius
+                color: Qt.rgba(1, 1, 1, 0.28)
+              }
+
+              Grid {
                 anchors.centerIn: parent
-                text: "󰀻"
-                font.family: Style.font.family
-                font.pixelSize: 20
-                color: Color.accent
+                columns: 3
+                rows: 3
+                spacing: Math.max(2, Math.round(root.iconPixelSize * 0.11))
+                Repeater {
+                  model: 9
+                  delegate: Rectangle {
+                    width: Math.max(3, Math.round(root.iconPixelSize * 0.1))
+                    height: width
+                    radius: width / 2
+                    color: Qt.rgba(1, 1, 1, 0.92)
+                  }
+                }
               }
             }
 
@@ -1234,17 +1323,17 @@ Item {
               onExited: root.releaseTooltip(launcherItem)
               onClicked: function(mouse) {
                 if (mouse.button === Qt.RightButton) root.openSettings()
-                else Util.execDetached("omarchy-menu toggle apps")
+                else root.toggleDrawer()
               }
             }
           }
         }
 
-        Rectangle {
+        Item {
           anchors.verticalCenter: parent.verticalCenter
-          width: 1
-          height: root.iconPixelSize * 0.65
-          color: Util.alpha(Color.foreground, 0.16)
+          width: root.separatorWidth
+          height: root.iconPixelSize - 6
+          Rectangle { anchors.centerIn: parent; width: 1; height: parent.height; color: Qt.rgba(1, 1, 1, 0.16) }
         }
 
         // Pinned Apps
@@ -1263,6 +1352,8 @@ Item {
             isDockHovered: root.isDockHovered
             magnificationDuration: root.magnificationDuration
             reduceMotion: root.reduceMotion
+            accent: root.accent
+            fontFamily: root.fontFamily
             isBeingDragged: root.draggingPinnedIndex === index
             isReordering: root.draggingPinnedIndex >= 0
             dragVisualX: root.draggingPinnedIndex === index ? root.dragVisualX : 0
@@ -1312,13 +1403,13 @@ Item {
         }
 
         // Separator between pinned and unpinned running apps
-        Rectangle {
+        Item {
           visible: (root.dockData.pinned && root.dockData.pinned.length > 0)
             && (root.dockData.unpinned && root.dockData.unpinned.length > 0)
           anchors.verticalCenter: parent.verticalCenter
-          width: 1
-          height: root.iconPixelSize * 0.65
-          color: Util.alpha(Color.foreground, 0.16)
+          width: root.separatorWidth
+          height: root.iconPixelSize - 6
+          Rectangle { anchors.centerIn: parent; width: 1; height: parent.height; color: Qt.rgba(1, 1, 1, 0.16) }
         }
 
         // Unpinned Running Apps
@@ -1337,6 +1428,8 @@ Item {
             isDockHovered: root.isDockHovered
             magnificationDuration: root.magnificationDuration
             reduceMotion: root.reduceMotion
+            accent: root.accent
+            fontFamily: root.fontFamily
             targetScale: (Array.isArray(root.unpinnedScales) && index < root.unpinnedScales.length) ? root.unpinnedScales[index] : 1.0
             targetOffsetX: (Array.isArray(root.unpinnedOffsets) && index < root.unpinnedOffsets.length) ? root.unpinnedOffsets[index] : 0
 
