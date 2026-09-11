@@ -98,8 +98,12 @@ Item {
       mipmap: true
     }
 
+    // Fallback initial. Driven by opacity rather than `visible`: the icon
+    // loads asynchronously, and if the tile is torn down while a load is in
+    // flight (closing the drawer), Qt crashes updating `visible` on an item
+    // whose window is already gone. Opacity takes a different path.
     Text {
-      visible: icon.status !== Image.Ready
+      opacity: icon.status === Image.Ready ? 0 : 1
       anchors.centerIn: parent
       text: root.appName.length > 0 ? root.appName.charAt(0).toUpperCase() : "★"
       font.family: root.fontFamily
