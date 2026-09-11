@@ -42,6 +42,7 @@ Item {
   readonly property color drawerColor: root.preferences.drawerColor || "#0a0c11"
   // Popups sit a touch lighter than the capsule, as in the design (24,26,33 vs 18,20,26).
   readonly property color glassColor: Qt.lighter(root.dockColor, 1.25)
+  readonly property color previewColor: root.preferences.previewColor ? root.preferences.previewColor : root.glassColor
   readonly property color accent: root.preferences.accentColor ? root.preferences.accentColor : Color.accent
   readonly property string pluginDir: Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "").replace(/\/$/, "")
   // Instrument Sans (OFL) ships with the plugin; fall back to the shell font.
@@ -1109,11 +1110,11 @@ Item {
         accent: root.accent
         fontFamily: root.fontFamily
         previews: root.preferences.windowPreviews !== false
+        glassColor: root.previewColor
         previewWidth: root.preferences.previewWidth || 220
         previewHeight: root.preferences.previewHeight || 220
         maxWidth: Math.max(240, (root.dockScreen ? root.dockScreen.width : 1280) - 40)
         glassOpacity: root.surfaceAlpha
-        glassColor: root.glassColor
         maxHeight: Math.max(120, (root.dockScreen ? root.dockScreen.height : 720) - dockPanel.height - 32)
         onContainsPointerChanged: {
           if (containsPointer) pickerHideTimer.stop()

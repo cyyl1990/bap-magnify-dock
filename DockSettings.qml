@@ -206,7 +206,8 @@ DockGlass {
           model: [
             { key: "dockColor", label: "Dock", presets: root.colorPresets, allowTheme: false },
             { key: "drawerColor", label: "Drawer", presets: root.colorPresets, allowTheme: false },
-            { key: "accentColor", label: "Accent", presets: root.accentPresets, allowTheme: true }
+            { key: "accentColor", label: "Accent", presets: root.accentPresets, allowTheme: true },
+            { key: "previewColor", label: "Preview window", presets: root.colorPresets, allowTheme: true }
           ]
           delegate: Column {
             id: colorRow
@@ -231,7 +232,7 @@ DockGlass {
               Rectangle {
                 visible: colorRow.modelData.allowTheme
                 width: 26; height: 26; radius: 13
-                color: root.accent
+                color: colorRow.modelData.key === "accentColor" ? root.accent : root.glassColor
                 border.width: colorRow.current === "" ? 2 : 1
                 border.color: colorRow.current === "" ? "#ffffff" : root.w(0.25)
                 Text {
@@ -264,8 +265,8 @@ DockGlass {
               fontFamily: root.fontFamily
               textScale: root.textScale
               allowEmpty: colorRow.modelData.allowTheme
-              emptyHint: colorRow.modelData.allowTheme ? "theme accent, or #RRGGBB" : "#RRGGBB"
-              value: colorRow.current !== "" ? colorRow.current : (colorRow.modelData.allowTheme ? root.accent : "#000000")
+              emptyHint: colorRow.modelData.key === "accentColor" ? "theme accent, or #RRGGBB" : (colorRow.modelData.allowTheme ? "same as dock, or #RRGGBB" : "#RRGGBB")
+              value: colorRow.current !== "" ? colorRow.current : (colorRow.modelData.key === "accentColor" ? root.accent : (colorRow.modelData.key === "previewColor" ? root.glassColor : "#000000"))
               onPicked: function(hex) { root.preferenceChanged(colorRow.modelData.key, hex) }
             }
           }
