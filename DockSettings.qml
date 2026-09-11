@@ -337,12 +337,15 @@ DockGlass {
         Repeater {
           model: [
             { key: "autoHide", label: "Auto-hide", sub: "Slide off-screen; reveal at the bottom edge" },
-            { key: "reserveSpace", label: "Reserve space", sub: "Tiled windows stop above the dock" }
+            { key: "reserveSpace", label: "Reserve space", sub: "Tiled windows stop above the dock" },
+            { key: "windowPreviews", label: "Window previews", sub: "Live thumbnails in the window list on hover" }
           ]
           delegate: Item {
             id: toggleRow
             required property var modelData
-            readonly property bool on: modelData.key === "autoHide" ? root.isAutoHide : root.isReserveSpace
+            readonly property bool on: modelData.key === "autoHide" ? root.isAutoHide
+              : modelData.key === "reserveSpace" ? root.isReserveSpace
+              : root.settings.windowPreviews !== false
             width: column.width - 36
             height: 50
 
@@ -394,7 +397,8 @@ DockGlass {
               cursorShape: Qt.PointingHandCursor
               onClicked: {
                 if (toggleRow.modelData.key === "autoHide") root.autoHideToggled()
-                else root.reserveSpaceToggled()
+                else if (toggleRow.modelData.key === "reserveSpace") root.reserveSpaceToggled()
+                else root.preferenceChanged("windowPreviews", !toggleRow.on)
               }
             }
           }

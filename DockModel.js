@@ -3,7 +3,8 @@
 var defaultSettings = {
   iconSize: 38, magnification: 1.7, spacing: 8, opacity: 0.72, textScale: 1,
   revealDelay: 0, hideDelay: 220, windowScope: "all",
-  dockColor: "#12141a", drawerColor: "#0a0c11", accentColor: ""
+  dockColor: "#12141a", drawerColor: "#0a0c11", accentColor: "",
+  windowPreviews: true
 };
 
 var colorPresets = ["#12141a", "#0a0c11", "#1e1e2e", "#24283b", "#1b2a2f", "#2b1d2e", "#3a2a1a", "#000000"];
@@ -36,6 +37,7 @@ function normalizeSettings(input) {
   result.drawerColor = isHexColor(input.drawerColor) ? input.drawerColor.toLowerCase() : defaultSettings.drawerColor;
   // Empty accent means "follow the Omarchy theme accent".
   result.accentColor = isHexColor(input.accentColor) ? input.accentColor.toLowerCase() : "";
+  result.windowPreviews = typeof input.windowPreviews === "boolean" ? input.windowPreviews : defaultSettings.windowPreviews;
   return result;
 }
 

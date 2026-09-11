@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Controls
+import Quickshell.Wayland
+import Quickshell.Widgets
 import qs.Commons
 
 // Window list for an app, per the design: 280px glass card, uppercase
@@ -14,6 +16,11 @@ DockGlass {
   property real textScale: 1
   property string fontFamily: Style.font.family
   property color accent: Color.accent
+  // Live thumbnails of each window (Hyprland toplevel capture), per the
+  // "Window previews" setting.
+  property bool previews: true
+  readonly property int thumbW: Math.round(128 * textScale)
+  readonly property int thumbH: Math.round(76 * textScale)
   readonly property bool containsPointer: hover.hovered
 
   signal windowActivated(var win)
@@ -21,7 +28,7 @@ DockGlass {
   signal dismissed()
 
   open: visible
-  width: Math.round(280 * Math.max(1, Math.min(1.3, textScale)))
+  width: Math.round((previews ? 360 : 280) * Math.max(1, Math.min(1.3, textScale)))
   height: Math.min(maxHeight, header.height + list.contentHeight + 12)
 
   HoverHandler { id: hover }
@@ -57,7 +64,7 @@ DockGlass {
       id: windowRow
       required property var modelData
       width: list.width
-      height: Math.round(48 * root.textScale)
+      height: root.previews ? root.thumbH + 16 : Math.round(48 * root.textScale)
 
       Rectangle {
         anchors.fill: parent
@@ -77,8 +84,27 @@ DockGlass {
           color: windowRow.modelData.active ? root.accent : Qt.rgba(1, 1, 1, 0.25)
         }
 
-        Column {
+        ClippingRectangle {
+          id: thumb
+          visible: root.previews
           anchors.left: dot.right
+          anchors.leftMargin: 10
+          anchors.verticalCenter: parent.verticalCenter
+          width: root.previews ? root.thumbW : 0
+          height: root.thumbH
+          radius: 6
+          color: Qt.rgba(0, 0, 0, 0.35)
+          ScreencopyView {
+            anchors.centerIn: parent
+            captureSource: root.previews ? windowRow.modelData.window : null
+            live: root.previews && root.visible
+            paintCursor: false
+            constraintSize: Qt.size(root.thumbW, root.thumbH)
+          }
+        }
+
+        Column {
+          anchors.left: thumb.visible ? thumb.right : dot.right
           anchors.leftMargin: 10
           anchors.right: closeButton.left
           anchors.rightMargin: 8
