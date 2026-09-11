@@ -20,6 +20,9 @@ PanelWindow {
   // Follows the dock's "Background opacity" setting: a solid backdrop at
   // 100%, more see-through as it is lowered.
   property real backdropOpacity: 0.9
+  // Height of the dock's own window; the drawer stops above it so the dock
+  // stays visible and clickable while the drawer is open, as in the design.
+  property real bottomInset: 0
   property string query: ""
 
   signal drawerClosed()
@@ -48,6 +51,7 @@ PanelWindow {
   screen: dockScreen
   color: "transparent"
   anchors { top: true; bottom: true; left: true; right: true }
+  margins { bottom: root.bottomInset }
   exclusionMode: ExclusionMode.Ignore
   WlrLayershell.namespace: "omarchy-dock-drawer"
   WlrLayershell.layer: WlrLayer.Overlay

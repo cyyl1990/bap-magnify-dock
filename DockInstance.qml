@@ -883,6 +883,7 @@ Item {
     textScale: root.textScale
     fontFamily: root.fontFamily
     backdropOpacity: root.preferences.opacity
+    bottomInset: dockPanel.implicitHeight
     onDrawerClosed: root.scheduleDockHide()
   }
 
