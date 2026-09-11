@@ -59,7 +59,8 @@ PanelWindow {
   }
   function closeMenu() { root.menuApp = null }
 
-  readonly property var apps: DockModel.drawerApps(DesktopEntries, root.appLibrary, Quickshell, root.query)
+  // Only computed while open: the grid instantiates a tile per app.
+  readonly property var apps: root.open ? DockModel.drawerApps(DesktopEntries, root.appLibrary, Quickshell, root.query) : []
 
   function launch(app) {
     root.close()

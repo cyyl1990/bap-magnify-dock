@@ -37,9 +37,12 @@ Item {
   readonly property color tileTop: hue >= 0 ? Qt.hsla(hue, 0.72, 0.61, 1) : "#434c5c"
   readonly property color tileBottom: hue >= 0 ? Qt.hsla(hue, 0.74, 0.45, 1) : "#262b34"
 
+  // Sample only real files; image:// provider URLs cannot be read by the
+  // quantizer and each failed attempt costs a warning and a load.
+  readonly property bool sampleable: root.iconSource.indexOf("file://") === 0 || root.iconSource.indexOf("/") === 0
   ColorQuantizer {
     id: quantizer
-    source: root.iconSource
+    source: root.sampleable ? root.iconSource : ""
     depth: 2
     rescaleSize: 32
   }

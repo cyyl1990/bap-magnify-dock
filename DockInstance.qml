@@ -577,7 +577,17 @@ Item {
     root.rebuildDock()
   }
 
-  function rebuildDock() {
+  // Every window event asks for a rebuild; several arrive together (title,
+  // activation, handle changes). Coalesce them so the rail's tiles are
+  // recreated at most once per burst.
+  function rebuildDock() { rebuildTimer.restart() }
+  Timer {
+    id: rebuildTimer
+    interval: 40
+    onTriggered: root.rebuildDockNow()
+  }
+
+  function rebuildDockNow() {
     var toplevels = []
     try {
       toplevels = ToplevelManager.toplevels.values
