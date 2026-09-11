@@ -257,40 +257,14 @@ DockGlass {
               }
             }
 
-            Rectangle {
+            DockColorPicker {
               width: parent.width
-              height: Math.round(30 * root.textScale)
-              radius: 8
-              color: root.w(0.08)
-              border.width: 1
-              border.color: hexInput.activeFocus ? root.w(0.35) : root.w(0.12)
-              TextInput {
-                id: hexInput
-                anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
-                verticalAlignment: TextInput.AlignVCenter
-                font.family: root.fontFamily
-                font.pixelSize: Math.round(12.5 * root.textScale)
-                color: "#ffffff"
-                selectionColor: root.w(0.25)
-                maximumLength: 7
-                text: colorRow.current
-                onActiveFocusChanged: if (!activeFocus) text = colorRow.current
-                onAccepted: {
-                  var v = text.trim()
-                  if (/^#[0-9a-fA-F]{6}$/.test(v) || (colorRow.modelData.allowTheme && v === "")) root.preferenceChanged(colorRow.modelData.key, v)
-                  else text = colorRow.current
-                }
-                Text {
-                  visible: hexInput.text.length === 0 && !hexInput.activeFocus
-                  anchors.fill: parent
-                  verticalAlignment: Text.AlignVCenter
-                  text: colorRow.modelData.allowTheme ? "theme accent, or #RRGGBB" : "#RRGGBB"
-                  font: hexInput.font
-                  color: root.w(0.35)
-                }
-              }
+              fontFamily: root.fontFamily
+              textScale: root.textScale
+              allowEmpty: colorRow.modelData.allowTheme
+              emptyHint: colorRow.modelData.allowTheme ? "theme accent, or #RRGGBB" : "#RRGGBB"
+              value: colorRow.current !== "" ? colorRow.current : (colorRow.modelData.allowTheme ? root.accent : "#000000")
+              onPicked: function(hex) { root.preferenceChanged(colorRow.modelData.key, hex) }
             }
           }
         }
