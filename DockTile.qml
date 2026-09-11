@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import Quickshell
 import qs.Commons
 
@@ -15,6 +14,8 @@ Item {
   property string appName: ""
   property real size: 38
   property real iconRatio: 0.66
+  property string shape: "rounded"      // rounded | circle | square
+  readonly property real radiusRatio: shape === "circle" ? 0.5 : (shape === "square" ? 0.12 : 0.24)
   property string fontFamily: Style.font.family
   property bool hovered: false
 
@@ -43,29 +44,26 @@ Item {
     rescaleSize: 32
   }
 
-  // Shadow (design: 0 4px 12px rgba(0,0,0,0.32)) drawn from a hidden copy.
-  Rectangle {
-    id: shadowSource
-    anchors.fill: parent
-    radius: Math.round(root.size * 0.24)
-    color: "#000000"
-    visible: false
-  }
-  MultiEffect {
-    anchors.fill: shadowSource
-    anchors.topMargin: 4
-    source: shadowSource
-    blurEnabled: true
-    blur: 0.7
-    blurMax: 24
-    opacity: 0.32
-    autoPaddingEnabled: true
+  // Soft drop shadow (design: 0 4px 12px rgba(0,0,0,0.32)) built from a few
+  // stacked translucent rectangles. MultiEffect would look closer but it
+  // segfaults inside Qt when tiles are instantiated at shell startup.
+  Repeater {
+    model: 4
+    delegate: Rectangle {
+      required property int index
+      anchors.centerIn: parent
+      anchors.verticalCenterOffset: 2 + index * 1.5
+      width: root.size + index * 3
+      height: root.size + index * 3
+      radius: Math.round((root.size + index * 3) * root.radiusRatio)
+      color: Qt.rgba(0, 0, 0, 0.09)
+    }
   }
 
   Rectangle {
     id: tile
     anchors.fill: parent
-    radius: Math.round(root.size * 0.24)
+    radius: Math.round(root.size * root.radiusRatio)
     gradient: Gradient {
       GradientStop { position: 0.0; color: root.hovered ? Qt.lighter(root.tileTop, 1.08) : root.tileTop }
       GradientStop { position: 1.0; color: root.hovered ? Qt.lighter(root.tileBottom, 1.08) : root.tileBottom }

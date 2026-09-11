@@ -17,6 +17,7 @@ PanelWindow {
   property var appLibrary: null
   property real textScale: 1
   property string fontFamily: Style.font.family
+  property string tileShape: "rounded"
   // Follows the dock's "Background opacity" setting: a solid backdrop at
   // 100%, more see-through as it is lowered.
   property real backdropOpacity: 0.9
@@ -260,6 +261,7 @@ PanelWindow {
               iconSource: cell.modelData.icon
               appName: cell.modelData.name
               fontFamily: root.fontFamily
+              shape: root.tileShape
               hovered: cellMouse.containsMouse
             }
             Text {
@@ -357,6 +359,7 @@ PanelWindow {
       iconSource: root.dragApp ? root.dragApp.icon : ""
       appName: root.dragApp ? root.dragApp.name : ""
       fontFamily: root.fontFamily
+      shape: root.tileShape
     }
 
     // Right-click menu for a tile: Open, Keep in Dock / Remove from Dock.

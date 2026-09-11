@@ -38,6 +38,8 @@ Item {
   // still leaves the surfaces readable: 100% is solid, 50% is about 0.71
   // alpha, 20% is about 0.45. Fully see-through is deliberately not reachable.
   readonly property real surfaceAlpha: Math.sqrt(Math.max(0, Math.min(1, root.preferences.opacity)))
+  readonly property string tileShape: root.preferences.tileShape || "rounded"
+  readonly property real tileRadiusRatio: DockModel.tileRadiusRatio(root.tileShape)
   readonly property bool themeColors: root.preferences.themeColors !== false
   readonly property color dockColor: root.themeColors ? Color.background : (root.preferences.dockColor || "#12141a")
   readonly property color drawerColor: root.themeColors ? Qt.darker(Color.background, 1.15) : (root.preferences.drawerColor || "#0a0c11")
@@ -1009,6 +1011,7 @@ Item {
     backdropColor: root.drawerColor
     bottomInset: dockPanel.implicitHeight
     pinnedIds: root.dockData.pinned.map(function(p) { return p.id })
+    tileShape: root.tileShape
     onDragMoved: function(app, x, y) { root.drawerDragMoved(app, x, y) }
     onDragEnded: function(app, x, y) { root.drawerDragEnded(app, x, y) }
     onPinToggleRequested: function(app) { if (app && app.id) root.togglePinApp(app.id) }
@@ -1333,24 +1336,21 @@ Item {
         }
       }
 
-      // Soft drop shadow under the capsule (design: 0 14px 44px rgba(0,0,0,0.45)).
-      Rectangle {
-        id: capsuleShadowSource
-        anchors.fill: dockCapsule
-        radius: dockCapsule.radius
-        color: Qt.rgba(0, 0, 0, 0.45 * root.surfaceAlpha)
-        visible: false
-      }
-      MultiEffect {
-        anchors.fill: capsuleShadowSource
-        anchors.topMargin: 10
-        source: capsuleShadowSource
-        blurEnabled: true
-        blur: 1.0
-        blurMax: 40
-        autoPaddingEnabled: true
-        z: -1
-        transform: Translate { y: capsuleSlide.y }
+      // Soft drop shadow under the capsule (design: 0 14px 44px rgba(0,0,0,0.45)),
+      // stacked translucent rectangles rather than MultiEffect (see DockTile).
+      Repeater {
+        model: 6
+        delegate: Rectangle {
+          required property int index
+          z: -1
+          anchors.centerIn: dockCapsule
+          anchors.verticalCenterOffset: 4 + index * 2
+          width: dockCapsule.width + index * 6
+          height: dockCapsule.height + index * 6
+          radius: dockCapsule.radius + index * 3
+          color: Qt.rgba(0, 0, 0, 0.075 * root.surfaceAlpha)
+          transform: Translate { y: capsuleSlide.y }
+        }
       }
 
       // Frosted glass capsule (design tokens: rgba(18,20,26,opacity), 19px
@@ -1402,6 +1402,7 @@ Item {
         iconSource: root.dropApp ? root.dropApp.icon : ""
         appName: root.dropApp ? root.dropApp.name : ""
         fontFamily: root.fontFamily
+        shape: root.tileShape
       }
 
       // Main Items Content Row
@@ -1430,7 +1431,7 @@ Item {
             // Launcher tile: white glass gradient, 24% radius, 3×3 dot grid.
             Rectangle {
               anchors.fill: parent
-              radius: Math.round(root.iconPixelSize * 0.24)
+              radius: Math.round(root.iconPixelSize * root.tileRadiusRatio)
               gradient: Gradient {
                 GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, launcherMouse.containsMouse || appDrawer.open ? 0.28 : 0.2) }
                 GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, launcherMouse.containsMouse || appDrawer.open ? 0.16 : 0.1) }
@@ -1506,6 +1507,7 @@ Item {
             reduceMotion: root.reduceMotion
             accent: root.accent
             fontFamily: root.fontFamily
+            tileShape: root.tileShape
             isBeingDragged: root.draggingPinnedIndex === index
             isReordering: root.draggingPinnedIndex >= 0
             dragVisualX: root.draggingPinnedIndex === index ? root.dragVisualX : 0
@@ -1583,6 +1585,7 @@ Item {
             reduceMotion: root.reduceMotion
             accent: root.accent
             fontFamily: root.fontFamily
+            tileShape: root.tileShape
             targetScale: (Array.isArray(root.unpinnedScales) && index < root.unpinnedScales.length) ? root.unpinnedScales[index] : 1.0
             targetOffsetX: (Array.isArray(root.unpinnedOffsets) && index < root.unpinnedOffsets.length) ? root.unpinnedOffsets[index] : 0
 
@@ -1643,6 +1646,7 @@ Item {
             reduceMotion: root.reduceMotion
             accent: root.accent
             fontFamily: root.fontFamily
+            tileShape: root.tileShape
             targetScale: (Array.isArray(root.recentScales) && index < root.recentScales.length) ? root.recentScales[index] : 1.0
             targetOffsetX: (Array.isArray(root.recentOffsets) && index < root.recentOffsets.length) ? root.recentOffsets[index] : 0
 

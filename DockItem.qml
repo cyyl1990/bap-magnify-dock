@@ -22,6 +22,7 @@ Item {
   property bool reduceMotion: false
   property color accent: Color.accent
   property string fontFamily: Style.font.family
+  property string tileShape: "rounded"
   property real bounceY: 0
   property real pressScale: (mouseArea.pressed && !root.isBeingDragged) ? 0.94 : 1.0
 
@@ -176,6 +177,7 @@ Item {
       iconSource: root.resolveIcon(root.appIcon)
       appName: root.appName
       fontFamily: root.fontFamily
+      shape: root.tileShape
       hovered: root.isHovered
     }
 

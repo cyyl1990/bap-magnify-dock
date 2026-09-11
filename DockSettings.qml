@@ -323,6 +323,60 @@ DockGlass {
           }
         }
 
+        // Icon shape
+        Text {
+          text: "ICON SHAPE"
+          font.family: root.fontFamily
+          font.pixelSize: Math.round(10.5 * root.textScale)
+          font.weight: Font.DemiBold
+          font.letterSpacing: 1.3
+          color: root.w(0.38)
+          topPadding: 18
+          bottomPadding: 10
+        }
+        Rectangle {
+          width: column.width - 36
+          height: Math.round(34 * root.textScale)
+          radius: 9
+          color: root.w(0.08)
+          Row {
+            anchors.fill: parent
+            anchors.margins: 3
+            spacing: 0
+            Repeater {
+              model: [
+                { id: "rounded", label: "Rounded" },
+                { id: "circle", label: "Circle" },
+                { id: "square", label: "Square" }
+              ]
+              delegate: Rectangle {
+                id: shapeSeg
+                required property var modelData
+                readonly property bool selected: (root.settings.tileShape || "rounded") === modelData.id
+                width: (parent.width) / 3
+                height: parent.height
+                radius: 7
+                color: selected ? root.w(0.16) : (shapeMouse.containsMouse ? root.w(0.06) : "transparent")
+                Text {
+                  anchors.centerIn: parent
+                  text: shapeSeg.modelData.label
+                  font.family: root.fontFamily
+                  font.pixelSize: Math.round(12.5 * root.textScale)
+                  font.weight: Font.Medium
+                  color: shapeSeg.selected ? "#ffffff" : root.w(0.55)
+                }
+                MouseArea {
+                  id: shapeMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.preferenceChanged("tileShape", shapeSeg.modelData.id)
+                }
+              }
+            }
+          }
+        }
+
         // Windows shown
         Text {
           text: "WINDOWS SHOWN"
