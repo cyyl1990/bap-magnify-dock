@@ -111,7 +111,8 @@ DockGlass {
             { key: "opacity", label: "Background opacity", min: 0.2, max: 1, step: 0.02, fmt: "%" },
             { key: "textScale", label: "Text size", min: 0.8, max: 1.6, step: 0.05, fmt: "%" },
             { key: "previewWidth", label: "Window preview width", min: 120, max: 640, step: 10, fmt: "px" },
-            { key: "previewHeight", label: "Window preview height", min: 80, max: 480, step: 10, fmt: "px" }
+            { key: "previewHeight", label: "Window preview height", min: 80, max: 480, step: 10, fmt: "px" },
+            { key: "recentCount", label: "Recent apps shown", min: 1, max: 8, step: 1, fmt: "" }
           ]
           delegate: Column {
             id: settingRow
@@ -125,6 +126,7 @@ DockGlass {
               var f = settingRow.modelData.fmt
               if (f === "%") return Math.round(v * 100) + "%"
               if (f === "x") return "×" + Number(v).toFixed(2)
+              if (f === "") return String(Math.round(v))
               return Math.round(v) + " px"
             }
 
@@ -202,8 +204,57 @@ DockGlass {
           topPadding: 18
           bottomPadding: 6
         }
+        Item {
+          id: themeRow
+          readonly property bool on: root.settings.themeColors !== false
+          width: column.width - 36
+          height: 50
+          Column {
+            anchors.left: parent.left
+            anchors.right: themeTrack.left
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 2
+            Text {
+              text: "Follow Omarchy theme"
+              font.family: root.fontFamily
+              font.pixelSize: Math.round(13 * root.textScale)
+              font.weight: Font.Medium
+              color: root.w(0.85)
+            }
+            Text {
+              width: parent.width
+              text: "Dock, drawer and accent take the current theme's colours"
+              wrapMode: Text.WordWrap
+              font.family: root.fontFamily
+              font.pixelSize: Math.round(11.5 * root.textScale)
+              color: root.w(0.42)
+            }
+          }
+          Rectangle {
+            id: themeTrack
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: 40; height: 24; radius: 12
+            color: themeRow.on ? root.accent : root.w(0.16)
+            Behavior on color { ColorAnimation { duration: 180 } }
+            Rectangle {
+              x: themeRow.on ? 19 : 3
+              y: 3
+              width: 18; height: 18; radius: 9
+              color: "#ffffff"
+              Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            }
+          }
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.preferenceChanged("themeColors", !themeRow.on)
+          }
+        }
+
         Repeater {
-          model: [
+          model: root.settings.themeColors !== false ? [] : [
             { key: "dockColor", label: "Dock", presets: root.colorPresets, allowTheme: false },
             { key: "drawerColor", label: "Drawer", presets: root.colorPresets, allowTheme: false },
             { key: "accentColor", label: "Accent", presets: root.accentPresets, allowTheme: true },
@@ -341,14 +392,16 @@ DockGlass {
           model: [
             { key: "autoHide", label: "Auto-hide", sub: "Slide off-screen; reveal at the bottom edge" },
             { key: "reserveSpace", label: "Reserve space", sub: "Tiled windows stop above the dock" },
-            { key: "windowPreviews", label: "Window previews", sub: "Live thumbnails in the window list on hover" }
+            { key: "windowPreviews", label: "Window previews", sub: "Live thumbnails in the window list on hover" },
+            { key: "recentApps", label: "Recent apps", sub: "A third group with the last few apps you launched" }
           ]
           delegate: Item {
             id: toggleRow
             required property var modelData
             readonly property bool on: modelData.key === "autoHide" ? root.isAutoHide
               : modelData.key === "reserveSpace" ? root.isReserveSpace
-              : root.settings.windowPreviews !== false
+              : modelData.key === "windowPreviews" ? root.settings.windowPreviews !== false
+              : root.settings.recentApps === true
             width: column.width - 36
             height: 50
 
@@ -401,7 +454,7 @@ DockGlass {
               onClicked: {
                 if (toggleRow.modelData.key === "autoHide") root.autoHideToggled()
                 else if (toggleRow.modelData.key === "reserveSpace") root.reserveSpaceToggled()
-                else root.preferenceChanged("windowPreviews", !toggleRow.on)
+                else root.preferenceChanged(toggleRow.modelData.key, !toggleRow.on)
               }
             }
           }

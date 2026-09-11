@@ -28,6 +28,7 @@ PanelWindow {
 
   signal drawerClosed()
   signal pinToggleRequested(var app)
+  signal launched(var app)
   // Drag a tile toward the dock. Positions are in this window's coordinates;
   // the dock sits directly below this window's bottom edge.
   signal dragMoved(var app, real x, real y)
@@ -61,6 +62,7 @@ PanelWindow {
 
   function launch(app) {
     root.close()
+    root.launched(app)
     DockModel.handleItemClick(app, Util, root.appLibrary, DesktopEntries)
   }
   function close() {

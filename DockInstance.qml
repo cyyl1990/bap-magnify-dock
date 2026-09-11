@@ -38,12 +38,13 @@ Item {
   // still leaves the surfaces readable: 100% is solid, 50% is about 0.71
   // alpha, 20% is about 0.45. Fully see-through is deliberately not reachable.
   readonly property real surfaceAlpha: Math.sqrt(Math.max(0, Math.min(1, root.preferences.opacity)))
-  readonly property color dockColor: root.preferences.dockColor || "#12141a"
-  readonly property color drawerColor: root.preferences.drawerColor || "#0a0c11"
+  readonly property bool themeColors: root.preferences.themeColors !== false
+  readonly property color dockColor: root.themeColors ? Color.background : (root.preferences.dockColor || "#12141a")
+  readonly property color drawerColor: root.themeColors ? Qt.darker(Color.background, 1.15) : (root.preferences.drawerColor || "#0a0c11")
   // Popups sit a touch lighter than the capsule, as in the design (24,26,33 vs 18,20,26).
   readonly property color glassColor: Qt.lighter(root.dockColor, 1.25)
-  readonly property color previewColor: root.preferences.previewColor ? root.preferences.previewColor : root.glassColor
-  readonly property color accent: root.preferences.accentColor ? root.preferences.accentColor : Color.accent
+  readonly property color previewColor: (!root.themeColors && root.preferences.previewColor) ? root.preferences.previewColor : root.glassColor
+  readonly property color accent: (!root.themeColors && root.preferences.accentColor) ? root.preferences.accentColor : Color.accent
   readonly property string pluginDir: Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "").replace(/\/$/, "")
   // Instrument Sans (OFL) ships with the plugin; fall back to the shell font.
   FontLoader { id: dockFont; source: Qt.resolvedUrl("fonts/InstrumentSans.ttf") }
@@ -169,8 +170,10 @@ Item {
   property real animatedLauncherOffsetX: root.launcherOffsetX
   property var pinnedScales: []
   property var unpinnedScales: []
+  property var recentScales: []
   property var pinnedOffsets: []
   property var unpinnedOffsets: []
+  property var recentOffsets: []
   property real extraCapsuleWidth: 0
   property real animatedExtraCapsuleWidth: root.extraCapsuleWidth
 
@@ -204,7 +207,16 @@ Item {
   // Dock items and pinned apps state
   // null means no saved preference; [] means explicitly no pinned apps.
   property var customPinnedApps: null
-  property var dockData: ({ pinned: [], unpinned: [], totalItems: 0 })
+  property var dockData: ({ pinned: [], unpinned: [], recent: [], totalItems: 0 })
+  // Recently launched app ids, most recent first (persisted in the config file).
+  property var recentIds: []
+
+  function noteLaunch(item) {
+    if (!item || !item.id) return
+    root.recentIds = DockModel.pushRecent(root.recentIds, String(item.id), 12)
+    root.saveConfig()
+    root.rebuildDock()
+  }
 
   // Drag & drop reorder state
   property int draggingPinnedIndex: -1
@@ -507,6 +519,9 @@ Item {
         if (Array.isArray(parsed.pinned)) {
           root.customPinnedApps = parsed.pinned
         }
+        if (Array.isArray(parsed.recent)) {
+          root.recentIds = parsed.recent.filter(function(x) { return typeof x === "string" })
+        }
         if (typeof parsed.autoHide === "boolean") {
           root.autoHide = parsed.autoHide
         }
@@ -524,7 +539,8 @@ Item {
       settings: root.preferences,
       autoHide: root.autoHide,
       reserveSpace: root.reserveSpace,
-      pinned: Array.isArray(root.customPinnedApps) ? root.customPinnedApps : DockModel.defaultPinnedApps
+      pinned: Array.isArray(root.customPinnedApps) ? root.customPinnedApps : DockModel.defaultPinnedApps,
+      recent: root.recentIds
     }
     var jsonStr = JSON.stringify(payload, null, 2)
     if (Util && typeof Util.execDetached === "function") {
@@ -585,18 +601,23 @@ Item {
       Quickshell,
       root.customPinnedApps
     )
+    data.recent = root.preferences.recentApps
+      ? DockModel.buildRecentItems(root.recentIds, data, DesktopEntries, root.appLibrary, Quickshell, root.preferences.recentCount || 4)
+      : []
     root.dockData = data
     if (root.pickerOpen) root.refreshPicker()
 
     var pCount = data.pinned ? data.pinned.length : 0
     var uCount = data.unpinned ? data.unpinned.length : 0
+    var rCount = data.recent ? data.recent.length : 0
     root.baselineGeometry = DockModel.computeBaselineCenters(
       root.baseIconSize,
       root.itemSpacing,
       root.dockPadding,
       pCount,
       uCount,
-      root.separatorWidth
+      root.separatorWidth,
+      rCount
     )
 
     updateMagnification()
@@ -632,6 +653,7 @@ Item {
     root.unpinnedScales = []
     root.pinnedOffsets = []
     root.unpinnedOffsets = []
+    root.recentOffsets = []
     root.extraCapsuleWidth = 0
 
     root.updateDragState(pt.x - root.dragGrabOffsetX)
@@ -771,8 +793,10 @@ Item {
       root.launcherOffsetX = 0
       root.pinnedScales = []
       root.unpinnedScales = []
+      root.recentScales = []
       root.pinnedOffsets = []
       root.unpinnedOffsets = []
+      root.recentOffsets = []
       root.extraCapsuleWidth = 0
       return
     }
@@ -813,7 +837,18 @@ Item {
     }
     root.unpinnedScales = uScales
 
-    var allScales = [root.launcherScale].concat(pScales).concat(uScales)
+    var rScales = []
+    var recentCenters = geo.recent || []
+    for (var r = 0; r < recentCenters.length; r++) {
+      rScales.push(DockModel.scaleFromDistance(
+        Math.abs(baseCursorX - recentCenters[r]),
+        root.maxMagnification,
+        root.magnifyRadius
+      ))
+    }
+    root.recentScales = rScales
+
+    var allScales = [root.launcherScale].concat(pScales).concat(uScales).concat(rScales)
     var offsets = DockModel.computeMagnifiedOffsets(
       allScales,
       root.baseIconSize,
@@ -821,7 +856,8 @@ Item {
     )
     root.launcherOffsetX = offsets.length > 0 ? offsets[0] : 0
     root.pinnedOffsets = offsets.slice(1, 1 + pScales.length)
-    root.unpinnedOffsets = offsets.slice(1 + pScales.length)
+    root.unpinnedOffsets = offsets.slice(1 + pScales.length, 1 + pScales.length + uScales.length)
+    root.recentOffsets = offsets.slice(1 + pScales.length + uScales.length)
     root.extraCapsuleWidth = (typeof offsets.totalExtra === "number") ? offsets.totalExtra : 0
   }
 
@@ -874,6 +910,7 @@ Item {
     root.launcherOffsetX = 0
     root.pinnedOffsets = []
     root.unpinnedOffsets = []
+    root.recentOffsets = []
     root.extraCapsuleWidth = 0
     root.updateMagnification()
   }
@@ -902,6 +939,9 @@ Item {
     var uoffs = []
     for (var u = 0; u < geo.unpinned.length; u++) uoffs.push(slot / 2)
     root.unpinnedOffsets = uoffs
+    var roffs = []
+    for (var rr = 0; rr < (geo.recent || []).length; rr++) roffs.push(slot / 2)
+    root.recentOffsets = roffs
     root.extraCapsuleWidth = slot
   }
 
@@ -972,6 +1012,7 @@ Item {
     onDragMoved: function(app, x, y) { root.drawerDragMoved(app, x, y) }
     onDragEnded: function(app, x, y) { root.drawerDragEnded(app, x, y) }
     onPinToggleRequested: function(app) { if (app && app.id) root.togglePinApp(app.id) }
+    onLaunched: function(app) { root.noteLaunch(app) }
     onDrawerClosed: root.scheduleDockHide()
   }
 
@@ -1202,6 +1243,7 @@ Item {
         glassColor: root.glassColor
 
         onLaunchClicked: function(item) {
+          if (item && !item.isRunning) root.noteLaunch(item)
           DockModel.handleItemClick(item, Util, root.appLibrary, DesktopEntries)
         }
         onPinToggled: function(item) {
@@ -1472,6 +1514,7 @@ Item {
             targetOffsetX: (Array.isArray(root.pinnedOffsets) && index < root.pinnedOffsets.length) ? root.pinnedOffsets[index] : 0
 
             onClicked: function(item) {
+              if (item && !item.isRunning) root.noteLaunch(item)
               DockModel.handleItemClick(item, Util, root.appLibrary, DesktopEntries)
             }
 
@@ -1544,6 +1587,7 @@ Item {
             targetOffsetX: (Array.isArray(root.unpinnedOffsets) && index < root.unpinnedOffsets.length) ? root.unpinnedOffsets[index] : 0
 
             onClicked: function(item) {
+              if (item && !item.isRunning) root.noteLaunch(item)
               DockModel.handleItemClick(item, Util, root.appLibrary, DesktopEntries)
             }
 
@@ -1568,6 +1612,48 @@ Item {
             onUnhovered: function(srcItem) {
               root.releaseAppTooltip(srcItem)
             }
+          }
+        }
+
+        // Divider before recent apps
+        Item {
+          visible: root.dockData.recent && root.dockData.recent.length > 0
+            && ((root.dockData.pinned && root.dockData.pinned.length > 0) || (root.dockData.unpinned && root.dockData.unpinned.length > 0))
+          anchors.verticalCenter: parent.verticalCenter
+          width: root.separatorWidth
+          height: root.iconPixelSize - 6
+          Rectangle { anchors.centerIn: parent; width: 1; height: parent.height; color: Qt.rgba(1, 1, 1, 0.16) }
+        }
+
+        // Recent apps (launched recently, not pinned, not running)
+        Repeater {
+          id: recentRepeater
+          model: root.dockData.recent || []
+
+          delegate: DockItem {
+            required property var modelData
+            required property int index
+
+            itemData: modelData
+            itemIndex: (root.dockData.pinned ? root.dockData.pinned.length : 0) + (root.dockData.unpinned ? root.dockData.unpinned.length : 0) + index
+            baseSize: root.baseIconSize
+            iconSize: root.iconPixelSize
+            isDockHovered: root.isDockHovered
+            magnificationDuration: root.magnificationDuration
+            reduceMotion: root.reduceMotion
+            accent: root.accent
+            fontFamily: root.fontFamily
+            targetScale: (Array.isArray(root.recentScales) && index < root.recentScales.length) ? root.recentScales[index] : 1.0
+            targetOffsetX: (Array.isArray(root.recentOffsets) && index < root.recentOffsets.length) ? root.recentOffsets[index] : 0
+
+            onClicked: function(item) {
+              root.noteLaunch(item)
+              DockModel.handleItemClick(item, Util, root.appLibrary, DesktopEntries)
+            }
+            onPinToggleRequested: function(item) { if (item && item.id) root.togglePinApp(item.id) }
+            onContextMenuRequested: function(item, srcItem) { root.openContextMenu(item, srcItem) }
+            onHovered: function(item, srcItem) { root.requestAppTooltip(item, srcItem) }
+            onUnhovered: function(srcItem) { root.releaseAppTooltip(srcItem) }
           }
         }
       }

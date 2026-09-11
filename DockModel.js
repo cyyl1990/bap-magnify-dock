@@ -4,7 +4,8 @@ var defaultSettings = {
   iconSize: 38, magnification: 1.7, spacing: 8, opacity: 0.72, textScale: 1,
   revealDelay: 0, hideDelay: 220, windowScope: "all",
   dockColor: "#12141a", drawerColor: "#0a0c11", accentColor: "", previewColor: "",
-  windowPreviews: true, previewWidth: 220, previewHeight: 220
+  windowPreviews: true, previewWidth: 220, previewHeight: 220,
+  themeColors: true, recentApps: false, recentCount: 4
 };
 
 var colorPresets = ["#12141a", "#0a0c11", "#1e1e2e", "#24283b", "#1b2a2f", "#2b1d2e", "#3a2a1a", "#000000"];
@@ -23,7 +24,7 @@ function normalizeSettings(input) {
   var result = {};
   var ranges = {
     iconSize: [24, 64], magnification: [1, 2], spacing: [2, 16],
-    opacity: [0.2, 1], textScale: [0.8, 1.6], previewWidth: [120, 640], previewHeight: [80, 480], revealDelay: [0, 1000], hideDelay: [100, 2000]
+    opacity: [0.2, 1], textScale: [0.8, 1.6], previewWidth: [120, 640], previewHeight: [80, 480], recentCount: [1, 8], revealDelay: [0, 1000], hideDelay: [100, 2000]
   };
   for (var key in ranges) {
     var value = input[key];
@@ -40,6 +41,8 @@ function normalizeSettings(input) {
   result.windowPreviews = typeof input.windowPreviews === "boolean" ? input.windowPreviews : defaultSettings.windowPreviews;
   // Empty preview colour means: same glass as the other popups.
   result.previewColor = isHexColor(input.previewColor) ? input.previewColor.toLowerCase() : "";
+  result.themeColors = typeof input.themeColors === "boolean" ? input.themeColors : defaultSettings.themeColors;
+  result.recentApps = typeof input.recentApps === "boolean" ? input.recentApps : defaultSettings.recentApps;
   return result;
 }
 
@@ -521,7 +524,8 @@ function computeMagnifiedOffsets(scales, baseSize, expansionRatio) {
 }
 
 // Calculate fixed unmagnified baseline coordinates
-function computeBaselineCenters(baseSize, spacing, pad, pinnedCount, unpinnedCount, sepWidth) {
+function computeBaselineCenters(baseSize, spacing, pad, pinnedCount, unpinnedCount, sepWidth, recentCount) {
+  recentCount = typeof recentCount === "number" ? recentCount : 0;
   var curX = pad;
   // A divider occupies its own width plus one spacing gap on its far side.
   sepWidth = (typeof sepWidth === "number" ? sepWidth : separatorWidth) + spacing;
@@ -549,12 +553,25 @@ function computeBaselineCenters(baseSize, spacing, pad, pinnedCount, unpinnedCou
     }
   }
 
+  // Recent apps (neither pinned nor running), after their own divider
+  var recentCenters = [];
+  if (recentCount > 0) {
+    if (pinnedCount + unpinnedCount > 0) {
+      curX += sepWidth;
+    }
+    for (var r = 0; r < recentCount; r++) {
+      recentCenters.push(curX + baseSize / 2);
+      curX += baseSize + spacing;
+    }
+  }
+
   var totalBaseWidth = curX - spacing + pad;
 
   return {
     launcher: launcherCenter,
     pinned: pinnedCenters,
     unpinned: unpinnedCenters,
+    recent: recentCenters,
     totalBaseWidth: totalBaseWidth
   };
 }
@@ -592,4 +609,48 @@ function drawerApps(desktopEntries, appLibrary, Quickshell, query) {
     return an < bn ? -1 : an > bn ? 1 : 0;
   });
   return out;
+}
+
+// ---------- recent apps ----------
+
+// Items for the "recent" group: recently launched apps that are neither
+// pinned nor currently running, most recent first, at most `max`.
+function buildRecentItems(recentIds, data, desktopEntries, appLibrary, Quickshell, max) {
+  var out = [];
+  var ids = Array.isArray(recentIds) ? recentIds : [];
+  var taken = [].concat(data.pinned || [], data.unpinned || []);
+  for (var i = 0; i < ids.length && out.length < max; i++) {
+    var id = String(ids[i] || "");
+    if (!id) continue;
+    var clash = false;
+    for (var t = 0; t < taken.length; t++) {
+      if (taken[t] && (taken[t].id === id || matchApp(taken[t].id, id))) { clash = true; break; }
+    }
+    if (clash) continue;
+    var entry = findDesktopEntry(desktopEntries, id);
+    if (!entry) continue;
+    out.push({
+      key: "recent_" + id,
+      id: entry.id || id,
+      name: entry.name || id,
+      icon: resolveIcon(entry.icon, appLibrary, Quickshell),
+      desktopEntry: entry,
+      isPinned: false,
+      isRunning: false,
+      isFocused: false,
+      windowCount: 0,
+      windows: []
+    });
+  }
+  return out;
+}
+
+// Put `id` at the front of the recent list, dropping earlier duplicates.
+function pushRecent(recentIds, id, cap) {
+  var list = [String(id)];
+  var ids = Array.isArray(recentIds) ? recentIds : [];
+  for (var i = 0; i < ids.length && list.length < cap; i++) {
+    if (ids[i] !== id && !matchApp(ids[i], id)) list.push(ids[i]);
+  }
+  return list;
 }
