@@ -1009,7 +1009,9 @@ Item {
     root.settingsOpen = false
     root.revealDock()
     appDrawer.open = true
+    nudgeTimer.restart()
   }
+  Timer { id: nudgeTimer; interval: 120; onTriggered: root.nudgePointer() }
 
   // `omarchy-shell magnify-dock drawer` toggles the app drawer (bind it to a
   // key); `settings` opens the settings card; `status` reports state.
@@ -1019,9 +1021,19 @@ Item {
     function settings(): string { if (root.settingsOpen) root.closeSettings(); else root.openSettings(); return root.settingsOpen ? "open" : "closed" }
     function autoHide(): string { root.autoHide = !root.autoHide; root.saveConfig(); return root.autoHide ? "on" : "off" }
     function status(): string {
-      return JSON.stringify({ screen: root.dockScreen ? root.dockScreen.name : "", pinned: root.dockData.pinned.length, running: root.dockData.unpinned.length, autoHide: root.autoHide, reserveSpace: root.reserveSpace, drawer: appDrawer.open, settings: root.settingsOpen, opacitySetting: root.preferences.opacity, surfaceAlpha: root.surfaceAlpha })
+      return JSON.stringify({ screen: root.dockScreen ? root.dockScreen.name : "", pinned: root.dockData.pinned.length, running: root.dockData.unpinned.length, autoHide: root.autoHide, reserveSpace: root.reserveSpace, drawer: appDrawer.open, settings: root.settingsOpen, opacitySetting: root.preferences.opacity, surfaceAlpha: root.surfaceAlpha, dockHovered: root.isDockHovered })
     }
   }
+
+  // When the drawer's layer maps and takes keyboard focus, Hyprland stops
+  // treating the dock as the pointer target until the mouse moves, so a
+  // second click on the launcher without moving is lost. Re-issuing the
+  // cursor's own position makes the compositor re-evaluate pointer focus.
+  Process {
+    id: pointerNudge
+    command: ["/usr/bin/bash", "-c", "p=$(hyprctl cursorpos 2>/dev/null | tr -d ' '); [ -n \"$p\" ] && hyprctl dispatch movecursor ${p%,*} ${p#*,} >/dev/null 2>&1"]
+  }
+  function nudgePointer() { if (!pointerNudge.running) pointerNudge.running = true }
 
   DockDrawer {
     id: appDrawer

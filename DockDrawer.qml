@@ -92,7 +92,7 @@ PanelWindow {
   // OnDemand rather than Exclusive: an exclusive overlay grab keeps pointer
   // input from reaching the dock below, so the launcher tile could not close
   // the drawer. OnDemand still gives the search field the keyboard on open.
-  WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+  WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
   Rectangle {
     id: backdrop
