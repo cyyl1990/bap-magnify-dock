@@ -62,6 +62,16 @@ Item {
   // Always visible macOS Mode
   property bool autoHide: false
   property bool reserveSpace: true
+  // Folded down to the launcher and the collapse arrow (persisted).
+  property bool collapsed: false
+  readonly property bool showBackground: root.preferences.showBackground !== false
+  readonly property bool collapsible: root.preferences.collapsible === true
+  readonly property bool folded: root.collapsed && root.collapsible
+  function toggleCollapsed() {
+    root.collapsed = !root.collapsed
+    root.saveConfig()
+    root.rebuildDock()
+  }
   property bool isDockHovered: false
   property bool edgeHovered: false
   property bool dockPresented: true
@@ -530,6 +540,9 @@ Item {
         if (typeof parsed.reserveSpace === "boolean") {
           root.reserveSpace = parsed.reserveSpace
         }
+        if (typeof parsed.collapsed === "boolean") {
+          root.collapsed = parsed.collapsed
+        }
       }
     } catch (e) {}
     root.rebuildDock()
@@ -541,6 +554,7 @@ Item {
       settings: root.preferences,
       autoHide: root.autoHide,
       reserveSpace: root.reserveSpace,
+      collapsed: root.collapsed,
       pinned: Array.isArray(root.customPinnedApps) ? root.customPinnedApps : DockModel.defaultPinnedApps,
       recent: root.recentIds
     }
@@ -619,9 +633,9 @@ Item {
     root.dockData = data
     if (root.pickerOpen) root.refreshPicker()
 
-    var pCount = data.pinned ? data.pinned.length : 0
-    var uCount = data.unpinned ? data.unpinned.length : 0
-    var rCount = data.recent ? data.recent.length : 0
+    var pCount = root.folded ? 0 : (data.pinned ? data.pinned.length : 0)
+    var uCount = root.folded ? 0 : (data.unpinned ? data.unpinned.length : 0)
+    var rCount = root.folded ? 0 : (data.recent ? data.recent.length : 0)
     root.baselineGeometry = DockModel.computeBaselineCenters(
       root.baseIconSize,
       root.itemSpacing,
@@ -1382,6 +1396,7 @@ Item {
           width: dockCapsule.width + index * 6
           height: dockCapsule.height + index * 6
           radius: dockCapsule.radius + index * 3
+          visible: root.showBackground
           color: Qt.rgba(0, 0, 0, 0.075 * root.surfaceAlpha)
           transform: Translate { y: capsuleSlide.y }
         }
@@ -1410,12 +1425,13 @@ Item {
         }
       }
 
-      color: Qt.rgba(root.dockColor.r, root.dockColor.g, root.dockColor.b, root.surfaceAlpha)
+      color: root.showBackground ? Qt.rgba(root.dockColor.r, root.dockColor.g, root.dockColor.b, root.surfaceAlpha) : "transparent"
       border.color: Qt.rgba(1, 1, 1, 0.13)
-      border.width: 1
+      border.width: root.showBackground ? 1 : 0
 
       // Inset edge light that follows the rounded shape.
       Rectangle {
+        visible: root.showBackground
         anchors.fill: parent
         radius: 19
         gradient: Gradient {
@@ -1518,6 +1534,7 @@ Item {
 
         Item {
           anchors.verticalCenter: parent.verticalCenter
+          visible: !root.folded
           width: root.separatorWidth
           height: root.iconPixelSize - 6
           Rectangle { anchors.centerIn: parent; width: 1; height: parent.height; color: Qt.rgba(1, 1, 1, 0.16) }
@@ -1532,6 +1549,7 @@ Item {
             required property var modelData
             required property int index
 
+            visible: !root.folded
             itemData: modelData
             itemIndex: index
             baseSize: root.baseIconSize
@@ -1593,7 +1611,8 @@ Item {
 
         // Separator between pinned and unpinned running apps
         Item {
-          visible: (root.dockData.pinned && root.dockData.pinned.length > 0)
+          visible: !root.folded
+            && (root.dockData.pinned && root.dockData.pinned.length > 0)
             && (root.dockData.unpinned && root.dockData.unpinned.length > 0)
           anchors.verticalCenter: parent.verticalCenter
           width: root.separatorWidth
@@ -1610,6 +1629,7 @@ Item {
             required property var modelData
             required property int index
 
+            visible: !root.folded
             itemData: modelData
             itemIndex: (root.dockData.pinned ? root.dockData.pinned.length : 0) + index
             baseSize: root.baseIconSize
@@ -1654,7 +1674,8 @@ Item {
 
         // Divider before recent apps
         Item {
-          visible: root.dockData.recent && root.dockData.recent.length > 0
+          visible: !root.folded
+            && root.dockData.recent && root.dockData.recent.length > 0
             && ((root.dockData.pinned && root.dockData.pinned.length > 0) || (root.dockData.unpinned && root.dockData.unpinned.length > 0))
           anchors.verticalCenter: parent.verticalCenter
           width: root.separatorWidth
@@ -1671,6 +1692,7 @@ Item {
             required property var modelData
             required property int index
 
+            visible: !root.folded
             itemData: modelData
             itemIndex: (root.dockData.pinned ? root.dockData.pinned.length : 0) + (root.dockData.unpinned ? root.dockData.unpinned.length : 0) + index
             baseSize: root.baseIconSize
@@ -1692,6 +1714,39 @@ Item {
             onContextMenuRequested: function(item, srcItem) { root.openContextMenu(item, srcItem) }
             onHovered: function(item, srcItem) { root.requestAppTooltip(item, srcItem) }
             onUnhovered: function(srcItem) { root.releaseAppTooltip(srcItem) }
+          }
+        }
+
+        // Collapse control: folds the rail down to the launcher.
+        Item {
+          id: collapseControl
+          visible: root.collapsible
+          anchors.verticalCenter: parent.verticalCenter
+          width: Math.max(14, Math.round(root.iconPixelSize * 0.4))
+          height: root.baseIconSize
+
+          Rectangle {
+            anchors.centerIn: parent
+            width: parent.width
+            height: Math.round(root.iconPixelSize * 0.7)
+            radius: Math.min(8, width / 2)
+            color: collapseMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+            Text {
+              anchors.centerIn: parent
+              text: root.collapsed ? "󰅂" : "󰅁"
+              font.family: Style.font.family
+              font.pixelSize: Math.round(root.iconPixelSize * 0.42)
+              color: Qt.rgba(1, 1, 1, collapseMouse.containsMouse ? 0.95 : 0.6)
+            }
+          }
+          MouseArea {
+            id: collapseMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onEntered: root.requestTooltip(collapseControl, root.collapsed ? "Expand dock" : "Collapse dock")
+            onExited: root.releaseTooltip(collapseControl)
+            onClicked: root.toggleCollapsed()
           }
         }
       }

@@ -447,7 +447,9 @@ DockGlass {
             { key: "autoHide", label: "Auto-hide", sub: "Slide off-screen; reveal at the bottom edge" },
             { key: "reserveSpace", label: "Reserve space", sub: "Tiled windows stop above the dock" },
             { key: "windowPreviews", label: "Window previews", sub: "Live thumbnails in the window list on hover" },
-            { key: "recentApps", label: "Recent apps", sub: "A third group with the last few apps you launched" }
+            { key: "recentApps", label: "Recent apps", sub: "A third group with the last few apps you launched" },
+            { key: "showBackground", label: "Dock background", sub: "Off: only the tiles float, no capsule behind them" },
+            { key: "collapsible", label: "Collapse control", sub: "Adds an arrow that folds the dock down to the launcher" }
           ]
           delegate: Item {
             id: toggleRow
@@ -455,6 +457,8 @@ DockGlass {
             readonly property bool on: modelData.key === "autoHide" ? root.isAutoHide
               : modelData.key === "reserveSpace" ? root.isReserveSpace
               : modelData.key === "windowPreviews" ? root.settings.windowPreviews !== false
+              : modelData.key === "showBackground" ? root.settings.showBackground !== false
+              : modelData.key === "collapsible" ? root.settings.collapsible === true
               : root.settings.recentApps === true
             width: column.width - 36
             height: 50

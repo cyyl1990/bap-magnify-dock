@@ -6,7 +6,8 @@ var defaultSettings = {
   dockColor: "#12141a", drawerColor: "#0a0c11", accentColor: "", previewColor: "",
   windowPreviews: true, previewWidth: 220, previewHeight: 220,
   themeColors: true, recentApps: false, recentCount: 4,
-  tileShape: "rounded"
+  tileShape: "rounded",
+  showBackground: true, collapsible: false
 };
 
 var colorPresets = ["#12141a", "#0a0c11", "#1e1e2e", "#24283b", "#1b2a2f", "#2b1d2e", "#3a2a1a", "#000000"];
@@ -45,6 +46,8 @@ function normalizeSettings(input) {
   result.themeColors = typeof input.themeColors === "boolean" ? input.themeColors : defaultSettings.themeColors;
   result.recentApps = typeof input.recentApps === "boolean" ? input.recentApps : defaultSettings.recentApps;
   result.tileShape = ["rounded", "circle", "square"].indexOf(input.tileShape) >= 0 ? input.tileShape : "rounded";
+  result.showBackground = typeof input.showBackground === "boolean" ? input.showBackground : defaultSettings.showBackground;
+  result.collapsible = typeof input.collapsible === "boolean" ? input.collapsible : defaultSettings.collapsible;
   return result;
 }
 
