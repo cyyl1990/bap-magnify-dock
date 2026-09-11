@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import qs.Commons
 
 // One app tile as drawn in the Magnify Dock design: a rounded square (24%
@@ -22,30 +21,18 @@ Item {
   width: size
   height: size
 
+  // Tile hue: a stable hash of the app name, so each app gets its own colour
+  // and keeps it. (Sampling the icon with ColorQuantizer looked closer to the
+  // design but crashes Quickshell when a tile is torn down mid-sample.)
   readonly property real hue: {
-    var best = -1, bestScore = 0
-    var cols = quantizer.colors || []
-    for (var i = 0; i < cols.length; i++) {
-      var c = cols[i]
-      if (!c) continue
-      var s = c.hslSaturation, l = c.hslLightness
-      var score = s * (1 - Math.abs(l - 0.5) * 1.6)
-      if (score > bestScore) { bestScore = score; best = c.hslHue }
-    }
-    return bestScore > 0.18 ? best : -1
+    var key = String(root.appName || root.iconSource || "")
+    if (!key) return -1
+    var h = 2166136261
+    for (var i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = (h * 16777619) >>> 0 }
+    return (h % 360) / 360
   }
   readonly property color tileTop: hue >= 0 ? Qt.hsla(hue, 0.72, 0.61, 1) : "#434c5c"
   readonly property color tileBottom: hue >= 0 ? Qt.hsla(hue, 0.74, 0.45, 1) : "#262b34"
-
-  // Sample only real files; image:// provider URLs cannot be read by the
-  // quantizer and each failed attempt costs a warning and a load.
-  readonly property bool sampleable: root.iconSource.indexOf("file://") === 0 || root.iconSource.indexOf("/") === 0
-  ColorQuantizer {
-    id: quantizer
-    source: root.sampleable ? root.iconSource : ""
-    depth: 2
-    rescaleSize: 32
-  }
 
   // Soft drop shadow (design: 0 4px 12px rgba(0,0,0,0.32)) built from a few
   // stacked translucent rectangles. MultiEffect would look closer but it
