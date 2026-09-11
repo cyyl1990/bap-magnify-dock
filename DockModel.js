@@ -151,6 +151,41 @@ function matchApp(appIdA, appIdB) {
   return false;
 }
 
+// Omarchy web apps run in Chromium with a window class such as
+// "chrome-youtube.com__-Default"; their desktop entry runs
+// "omarchy-launch-webapp https://youtube.com/". Match the two by site host.
+var webAppClassRe = /^(?:chrome|chromium|brave|msedge|vivaldi|google-chrome)-([^_]+)__/i;
+
+function hostFromUrl(url) {
+  var m = String(url || "").match(/^[a-z][a-z0-9+.-]*:\/\/([^\/:?#]+)/i);
+  return m ? m[1].toLowerCase().replace(/^www\./, "") : "";
+}
+
+function webAppHostFromClass(cls) {
+  var m = String(cls || "").match(webAppClassRe);
+  return m ? m[1].toLowerCase().replace(/^www\./, "") : "";
+}
+
+function webAppHostFromEntry(entry) {
+  if (!entry) return "";
+  var exec = String(entry.execString || "");
+  var m = exec.match(/omarchy-launch-webapp\s+["']?([^\s"']+)/);
+  if (m) return hostFromUrl(m[1]);
+  m = exec.match(/--app=["']?([^\s"']+)/);
+  if (m) return hostFromUrl(m[1]);
+  return "";
+}
+
+function findWebAppEntry(desktopEntries, cls) {
+  var host = webAppHostFromClass(cls);
+  if (!host || !desktopEntries || !desktopEntries.applications) return null;
+  var apps = toArray(desktopEntries.applications.values);
+  for (var i = 0; i < apps.length; i++) {
+    if (apps[i] && webAppHostFromEntry(apps[i]) === host) return apps[i];
+  }
+  return null;
+}
+
 function entryAliases(entry, fallbackId) {
   var aliases = [fallbackId];
   if (!entry) return aliases;
@@ -184,6 +219,12 @@ function windowAliases(win) {
 function entryMatchesWindow(entry, fallbackId, win) {
   var appAliases = entryAliases(entry, fallbackId);
   var winAliases = windowAliases(win);
+  var host = webAppHostFromEntry(entry);
+  if (host) {
+    for (var h = 0; h < winAliases.length; h++) {
+      if (webAppHostFromClass(winAliases[h]) === host) return true;
+    }
+  }
   for (var a = 0; a < appAliases.length; a++) {
     for (var w = 0; w < winAliases.length; w++) {
       if (matchApp(appAliases[a], winAliases[w])) return true;
@@ -195,6 +236,9 @@ function entryMatchesWindow(entry, fallbackId, win) {
 function findDesktopEntry(desktopEntries, appId) {
   if (!desktopEntries || !appId) return null;
   var id = String(appId);
+
+  var web = findWebAppEntry(desktopEntries, id);
+  if (web) return web;
 
   var entry = desktopEntries.byId ? desktopEntries.byId(id) : null;
   if (entry) return entry;

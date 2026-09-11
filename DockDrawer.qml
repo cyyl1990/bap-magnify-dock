@@ -27,6 +27,26 @@ PanelWindow {
   property string query: ""
 
   signal drawerClosed()
+  signal pinToggleRequested(var app)
+
+  // Ids of apps currently pinned, so the menu can say Keep or Remove.
+  property var pinnedIds: []
+  property var menuApp: null
+  property real menuX: 0
+  property real menuY: 0
+  function isPinned(app) {
+    if (!app) return false
+    for (var i = 0; i < root.pinnedIds.length; i++) {
+      if (DockModel.matchApp(root.pinnedIds[i], app.id)) return true
+    }
+    return false
+  }
+  function openMenu(app, x, y) {
+    root.menuApp = app
+    root.menuX = Math.min(x, root.width - 200)
+    root.menuY = Math.min(y, root.height - root.bottomInset - 110)
+  }
+  function closeMenu() { root.menuApp = null }
 
   readonly property var apps: DockModel.drawerApps(DesktopEntries, root.appLibrary, Quickshell, root.query)
 
@@ -67,10 +87,11 @@ PanelWindow {
 
     MouseArea {
       anchors.fill: parent
-      onClicked: root.close()
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
+      onClicked: { if (root.menuApp) root.closeMenu(); else root.close() }
     }
 
-    Keys.onEscapePressed: root.close()
+    Keys.onEscapePressed: { if (root.menuApp) root.closeMenu(); else root.close() }
 
     // Search
     Rectangle {
@@ -248,10 +269,24 @@ PanelWindow {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.launch(cell.modelData)
+            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+            onClicked: function(mouse) {
+              if (mouse.button === Qt.RightButton) {
+                var p = cellMouse.mapToItem(backdrop, mouse.x, mouse.y)
+                root.openMenu(cell.modelData, p.x, p.y)
+              } else if (mouse.button === Qt.MiddleButton) {
+                root.pinToggleRequested(cell.modelData)
+              } else if (root.menuApp) {
+                root.closeMenu()
+              } else {
+                root.launch(cell.modelData)
+              }
+            }
           }
         }
       }
+
+      Item { id: menuAnchorDummy; width: 0; height: 0 }
 
       Text {
         visible: root.apps.length === 0
@@ -264,5 +299,75 @@ PanelWindow {
         color: Qt.rgba(1, 1, 1, 0.45)
       }
     }
+
+    // Right-click menu for a tile: Open, Keep in Dock / Remove from Dock.
+    DockGlass {
+      id: tileMenu
+      visible: root.menuApp !== null
+      open: visible
+      x: root.menuX
+      y: root.menuY
+      width: Math.round(200 * Math.max(1, Math.min(1.3, root.textScale)))
+      height: menuColumn.implicitHeight + 10
+      glassOpacity: Math.max(0.9, root.backdropOpacity)
+      glassColor: Qt.lighter(root.backdropColor, 1.6)
+
+      Column {
+        id: menuColumn
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.topMargin: 5
+
+        Text {
+          width: parent.width
+          leftPadding: 14; rightPadding: 14; topPadding: 7; bottomPadding: 5
+          elide: Text.ElideRight
+          text: root.menuApp ? String(root.menuApp.name || "").toUpperCase() : ""
+          font.family: root.fontFamily
+          font.pixelSize: Math.round(11 * root.textScale)
+          font.weight: Font.DemiBold
+          font.letterSpacing: 1.1
+          color: Qt.rgba(1, 1, 1, 0.4)
+        }
+        Repeater {
+          model: [
+            { label: "Open", action: "open" },
+            { label: root.isPinned(root.menuApp) ? "Remove from Dock" : "Keep in Dock", action: "pin" }
+          ]
+          delegate: Rectangle {
+            id: menuRow
+            required property var modelData
+            width: menuColumn.width - 10
+            x: 5
+            height: Math.round(30 * root.textScale)
+            radius: 8
+            color: menuRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+            Text {
+              anchors.left: parent.left
+              anchors.leftMargin: 9
+              anchors.verticalCenter: parent.verticalCenter
+              text: menuRow.modelData.label
+              font.family: root.fontFamily
+              font.pixelSize: Math.round(13.5 * root.textScale)
+              color: Qt.rgba(1, 1, 1, 0.92)
+            }
+            MouseArea {
+              id: menuRowMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                var app = root.menuApp
+                root.closeMenu()
+                if (menuRow.modelData.action === "open") root.launch(app)
+                else root.pinToggleRequested(app)
+              }
+            }
+          }
+        }
+      }
+    }
+
   }
 }

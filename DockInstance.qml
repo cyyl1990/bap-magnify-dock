@@ -893,6 +893,8 @@ Item {
     backdropOpacity: root.surfaceAlpha
     backdropColor: root.drawerColor
     bottomInset: dockPanel.implicitHeight
+    pinnedIds: root.dockData.pinned.map(function(p) { return p.id })
+    onPinToggleRequested: function(app) { if (app && app.id) root.togglePinApp(app.id) }
     onDrawerClosed: root.scheduleDockHide()
   }
 
