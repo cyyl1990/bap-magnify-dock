@@ -34,6 +34,10 @@ Item {
   property real layoutExpansionRatio: 0.82
   property int magnificationDuration: 90
   readonly property real textScale: root.preferences.textScale || 1
+  // The opacity slider is mapped through a square curve so it reads evenly:
+  // 50% on the slider is about a quarter alpha, which looks half see-through
+  // over a dark tint; 100% stays fully solid.
+  readonly property real surfaceAlpha: Math.pow(Math.max(0, Math.min(1, root.preferences.opacity)), 2)
   readonly property color dockColor: root.preferences.dockColor || "#12141a"
   readonly property color drawerColor: root.preferences.drawerColor || "#0a0c11"
   // Popups sit a touch lighter than the capsule, as in the design (24,26,33 vs 18,20,26).
@@ -886,7 +890,7 @@ Item {
     appLibrary: root.appLibrary
     textScale: root.textScale
     fontFamily: root.fontFamily
-    backdropOpacity: root.preferences.opacity
+    backdropOpacity: root.surfaceAlpha
     backdropColor: root.drawerColor
     bottomInset: dockPanel.implicitHeight
     onDrawerClosed: root.scheduleDockHide()
@@ -987,7 +991,7 @@ Item {
         implicitWidth: tooltipLabel.implicitWidth + 22
         implicitHeight: tooltipLabel.implicitHeight + 10
         radius: 8
-        color: Qt.rgba(root.glassColor.r, root.glassColor.g, root.glassColor.b, Math.max(0.9, root.preferences.opacity))
+        color: Qt.rgba(root.glassColor.r, root.glassColor.g, root.glassColor.b, Math.max(0.6, root.surfaceAlpha))
         border.color: Qt.rgba(1, 1, 1, 0.13)
         border.width: 1
 
@@ -1026,7 +1030,7 @@ Item {
         textScale: root.textScale
         accent: root.accent
         fontFamily: root.fontFamily
-        glassOpacity: root.preferences.opacity
+        glassOpacity: root.surfaceAlpha
         glassColor: root.glassColor
         maxHeight: Math.max(120, (root.dockScreen ? root.dockScreen.height : 720) - dockPanel.height - 32)
         onContainsPointerChanged: {
@@ -1065,7 +1069,7 @@ Item {
         isReserveSpace: root.reserveSpace
         accent: root.accent
         fontFamily: root.fontFamily
-        glassOpacity: root.preferences.opacity
+        glassOpacity: root.surfaceAlpha
         glassColor: root.glassColor
         maxHeight: Math.max(180, (root.dockScreen ? root.dockScreen.height : 720) - dockPanel.height - 32)
         onPreferenceChanged: function(key, value) { root.changePreference(key, value) }
@@ -1111,7 +1115,7 @@ Item {
         isAudioMuted: root.isAppAudioMuted(root.contextTarget)
         textScale: root.textScale
         fontFamily: root.fontFamily
-        glassOpacity: root.preferences.opacity
+        glassOpacity: root.surfaceAlpha
         glassColor: root.glassColor
 
         onLaunchClicked: function(item) {
@@ -1209,7 +1213,7 @@ Item {
         id: capsuleShadowSource
         anchors.fill: dockCapsule
         radius: dockCapsule.radius
-        color: Qt.rgba(0, 0, 0, 0.45)
+        color: Qt.rgba(0, 0, 0, 0.45 * root.surfaceAlpha)
         visible: false
       }
       MultiEffect {
@@ -1247,7 +1251,7 @@ Item {
         }
       }
 
-      color: Qt.rgba(root.dockColor.r, root.dockColor.g, root.dockColor.b, root.preferences.opacity)
+      color: Qt.rgba(root.dockColor.r, root.dockColor.g, root.dockColor.b, root.surfaceAlpha)
       border.color: Qt.rgba(1, 1, 1, 0.13)
       border.width: 1
 
