@@ -113,9 +113,12 @@ function toArray(values) {
 // Preserve release channels: separate installations must not share windows or pins.
 var commonSuffixes = /-(stable|bin|git|oss|browser|desktop|electron|community)$/i;
 
+var desktopSuffixRe = /\.desktop$/i;
+var nonAlnumRe = /[^a-z0-9]/g;
+
 function cleanAppId(id) {
   if (!id) return "";
-  var s = String(id).trim().toLowerCase().replace(/\.desktop$/i, "");
+  var s = String(id).trim().toLowerCase().replace(desktopSuffixRe, "");
   // For reverse-DNS identifiers (e.g. org.gnome.Nautilus, io.github.user.app, dev.zed.Zed, com.spotify.Client)
   if (s.indexOf(".") !== -1) {
     var parts = s.split(".");
@@ -126,12 +129,12 @@ function cleanAppId(id) {
       s = last;
     }
   }
-  return s.replace(commonSuffixes, "").replace(/[^a-z0-9]/g, "");
+  return s.replace(commonSuffixes, "").replace(nonAlnumRe, "");
 }
 
 function normalizeId(id) {
   if (!id) return "";
-  return cleanAppId(id) || String(id).toLowerCase().replace(/[^a-z0-9]/g, "");
+  return cleanAppId(id) || String(id).toLowerCase().replace(nonAlnumRe, "");
 }
 
 function matchApp(appIdA, appIdB) {
@@ -142,8 +145,8 @@ function matchApp(appIdA, appIdB) {
   if (a === b) return true;
 
   // Exact raw compare without .desktop
-  var rawA = String(appIdA).toLowerCase().replace(/\.desktop$/i, "");
-  var rawB = String(appIdB).toLowerCase().replace(/\.desktop$/i, "");
+  var rawA = String(appIdA).toLowerCase().replace(desktopSuffixRe, "");
+  var rawB = String(appIdB).toLowerCase().replace(desktopSuffixRe, "");
   if (rawA === rawB) return true;
 
   // Terminal aliases & generic fallback
@@ -163,26 +166,42 @@ function matchApp(appIdA, appIdB) {
 // Omarchy web apps run in Chromium with a window class such as
 // "chrome-youtube.com__-Default"; their desktop entry runs
 // "omarchy-launch-webapp https://youtube.com/". Match the two by site host.
+// All regular expressions live at module level: rebuildDock runs on every
+// window event, and allocating fresh RegExp objects inside those loops churns
+// the QML JavaScript heap (a QV4 GC crash was traced to exactly that).
 var webAppClassRe = /^(?:chrome|chromium|brave|msedge|vivaldi|google-chrome)-([^_]+)__/i;
+var urlHostRe = /^[a-z][a-z0-9+.-]*:\/\/([^\/:?#]+)/i;
+var wwwPrefixRe = /^www\./;
+var webappExecRe = /omarchy-launch-webapp\s+["']?([^\s"']+)/;
+var appFlagRe = /--app=["']?([^\s"']+)/;
 
 function hostFromUrl(url) {
-  var m = String(url || "").match(/^[a-z][a-z0-9+.-]*:\/\/([^\/:?#]+)/i);
-  return m ? m[1].toLowerCase().replace(/^www\./, "") : "";
+  var m = String(url || "").match(urlHostRe);
+  return m ? m[1].toLowerCase().replace(wwwPrefixRe, "") : "";
 }
 
 function webAppHostFromClass(cls) {
   var m = String(cls || "").match(webAppClassRe);
-  return m ? m[1].toLowerCase().replace(/^www\./, "") : "";
+  return m ? m[1].toLowerCase().replace(wwwPrefixRe, "") : "";
 }
+
+// Cache: desktop entry id -> web-app host ("" when it is not a web app).
+var entryHostCache = Object.create(null);
 
 function webAppHostFromEntry(entry) {
   if (!entry) return "";
+  var key = String(entry.id || "");
+  if (key && key in entryHostCache) return entryHostCache[key];
   var exec = String(entry.execString || "");
-  var m = exec.match(/omarchy-launch-webapp\s+["']?([^\s"']+)/);
-  if (m) return hostFromUrl(m[1]);
-  m = exec.match(/--app=["']?([^\s"']+)/);
-  if (m) return hostFromUrl(m[1]);
-  return "";
+  var host = "";
+  var m = exec.match(webappExecRe);
+  if (m) host = hostFromUrl(m[1]);
+  else {
+    m = exec.match(appFlagRe);
+    if (m) host = hostFromUrl(m[1]);
+  }
+  if (key) entryHostCache[key] = host;
+  return host;
 }
 
 function findWebAppEntry(desktopEntries, cls) {
@@ -195,6 +214,10 @@ function findWebAppEntry(desktopEntries, cls) {
   return null;
 }
 
+var dirPrefixRe = /^.*\//;
+var whitespaceRe = /\s+/;
+var genericExes = ["python", "python3", "bash", "sh", "flatpak", "uwsm", "uwsm-app", "electron"];
+
 function entryAliases(entry, fallbackId) {
   var aliases = [fallbackId];
   if (!entry) return aliases;
@@ -203,14 +226,13 @@ function entryAliases(entry, fallbackId) {
   aliases.push(entry.startupClass || "");
   aliases.push(entry.name || "");
 
-  var genericExes = ["python", "python3", "bash", "sh", "flatpak", "uwsm", "uwsm-app", "electron"];
   var command = toArray(entry.command);
   if (command.length > 0) {
-    var cmdExe = String(command[0]).replace(/^.*\//, "");
+    var cmdExe = String(command[0]).replace(dirPrefixRe, "");
     if (genericExes.indexOf(cmdExe) === -1) aliases.push(cmdExe);
   }
   if (entry.execString) {
-    var rawExe = String(entry.execString).split(/\s+/)[0].replace(/^.*\//, "");
+    var rawExe = String(entry.execString).split(whitespaceRe)[0].replace(dirPrefixRe, "");
     if (genericExes.indexOf(rawExe) === -1) aliases.push(rawExe);
   }
   return aliases;
@@ -405,14 +427,14 @@ function buildDockItems(toplevels, desktopEntries, appLibrary, Quickshell, custo
 function resolveLaunchId(item, desktopEntries) {
   if (!item) return "";
   if (item.desktopEntry && item.desktopEntry.id) {
-    return String(item.desktopEntry.id).replace(/\.desktop$/i, "");
+    return String(item.desktopEntry.id).replace(desktopSuffixRe, "");
   }
-  var rawId = String(item.id || "").replace(/\.desktop$/i, "");
+  var rawId = String(item.id || "").replace(desktopSuffixRe, "");
   if (!rawId) return "";
   if (desktopEntries) {
     var entry = findDesktopEntry(desktopEntries, rawId);
     if (entry && entry.id) {
-      return String(entry.id).replace(/\.desktop$/i, "");
+      return String(entry.id).replace(desktopSuffixRe, "");
     }
   }
   return rawId;

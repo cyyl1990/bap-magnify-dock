@@ -871,13 +871,20 @@ Item {
       target: modelData
       function onWorkspaceChanged() { Qt.callLater(root.rebuildDock) }
       function onMonitorChanged() { Qt.callLater(root.rebuildDock) }
-      function onTitleChanged() { Qt.callLater(root.rebuildDock) }
+      // A title change never moves an app between groups; only the open
+      // window list cares. Terminals retitle every second, so keep this cheap.
+      function onTitleChanged() { titleRefreshTimer.restart() }
       function onWaylandHandleChanged() { Qt.callLater(root.rebuildDock) }
     }
   }
   Connections {
     target: Hyprland.toplevels
     function onValuesChanged() { Qt.callLater(root.rebuildDock) }
+  }
+  Timer {
+    id: titleRefreshTimer
+    interval: 250
+    onTriggered: if (root.pickerOpen) root.refreshPicker()
   }
 
   // Reactive listeners for window and app changes
