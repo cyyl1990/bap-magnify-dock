@@ -4,7 +4,7 @@ var defaultSettings = {
   iconSize: 38, magnification: 1.7, spacing: 8, opacity: 0.72, textScale: 1,
   revealDelay: 0, hideDelay: 220, windowScope: "all",
   dockColor: "#12141a", drawerColor: "#0a0c11", accentColor: "",
-  windowPreviews: true, previewSize: 220
+  windowPreviews: true, previewWidth: 220, previewHeight: 220
 };
 
 var colorPresets = ["#12141a", "#0a0c11", "#1e1e2e", "#24283b", "#1b2a2f", "#2b1d2e", "#3a2a1a", "#000000"];
@@ -23,7 +23,7 @@ function normalizeSettings(input) {
   var result = {};
   var ranges = {
     iconSize: [24, 64], magnification: [1, 2], spacing: [2, 16],
-    opacity: [0.2, 1], textScale: [0.8, 1.6], previewSize: [120, 400], revealDelay: [0, 1000], hideDelay: [100, 2000]
+    opacity: [0.2, 1], textScale: [0.8, 1.6], previewWidth: [120, 640], previewHeight: [80, 480], revealDelay: [0, 1000], hideDelay: [100, 2000]
   };
   for (var key in ranges) {
     var value = input[key];

@@ -18,16 +18,18 @@ DockGlass {
   property color accent: Color.accent
   property string fontFamily: Style.font.family
   property bool previews: true
-  property real previewSize: 220
+  property real previewWidth: 220
+  property real previewHeight: 220
   readonly property bool containsPointer: hover.hovered
 
   signal windowActivated(var win)
   signal windowClosed(var win)
   signal dismissed()
 
-  readonly property int cardSize: Math.round(previewSize)          // square thumbnail box, from settings
-  readonly property int cardW: cardSize + 16
-  readonly property int cardH: cardSize + Math.round(42 * textScale) + 14
+  readonly property int boxW: Math.round(previewWidth)             // thumbnail box, from settings
+  readonly property int boxH: Math.round(previewHeight)
+  readonly property int cardW: boxW + 16
+  readonly property int cardH: boxH + Math.round(42 * textScale) + 14
   readonly property int cardGap: 8
 
   open: visible
@@ -89,8 +91,8 @@ DockGlass {
         anchors.top: parent.top
         anchors.topMargin: 8
         anchors.horizontalCenter: parent.horizontalCenter
-        width: root.cardSize
-        height: root.cardSize
+        width: root.boxW
+        height: root.boxH
         radius: 8
         color: Qt.rgba(0, 0, 0, 0.35)
         // Cover-fit: scale the window to fill the square and crop the excess,
@@ -102,8 +104,10 @@ DockGlass {
           live: root.visible
           paintCursor: false
           readonly property real aspect: sourceSize.height > 0 ? sourceSize.width / sourceSize.height : 1
-          width: aspect >= 1 ? Math.round(root.cardSize * aspect) : root.cardSize
-          height: aspect >= 1 ? root.cardSize : Math.round(root.cardSize / aspect)
+          readonly property real boxAspect: root.boxW / root.boxH
+          // fill the box: match the box on the side that would otherwise leave a gap, crop the other
+          width: aspect >= boxAspect ? Math.round(root.boxH * aspect) : root.boxW
+          height: aspect >= boxAspect ? root.boxH : Math.round(root.boxW / aspect)
         }
       }
 

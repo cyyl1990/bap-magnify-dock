@@ -1109,7 +1109,8 @@ Item {
         accent: root.accent
         fontFamily: root.fontFamily
         previews: root.preferences.windowPreviews !== false
-        previewSize: root.preferences.previewSize || 220
+        previewWidth: root.preferences.previewWidth || 220
+        previewHeight: root.preferences.previewHeight || 220
         maxWidth: Math.max(240, (root.dockScreen ? root.dockScreen.width : 1280) - 40)
         glassOpacity: root.surfaceAlpha
         glassColor: root.glassColor

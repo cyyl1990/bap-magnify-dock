@@ -110,7 +110,8 @@ DockGlass {
             { key: "spacing", label: "Spacing", min: 2, max: 16, step: 1, fmt: "px" },
             { key: "opacity", label: "Background opacity", min: 0.2, max: 1, step: 0.02, fmt: "%" },
             { key: "textScale", label: "Text size", min: 0.8, max: 1.6, step: 0.05, fmt: "%" },
-            { key: "previewSize", label: "Window preview size", min: 120, max: 400, step: 10, fmt: "px" }
+            { key: "previewWidth", label: "Window preview width", min: 120, max: 640, step: 10, fmt: "px" },
+            { key: "previewHeight", label: "Window preview height", min: 80, max: 480, step: 10, fmt: "px" }
           ]
           delegate: Column {
             id: settingRow
