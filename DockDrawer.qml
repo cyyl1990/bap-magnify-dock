@@ -28,6 +28,15 @@ PanelWindow {
 
   signal drawerClosed()
   signal pinToggleRequested(var app)
+  // Drag a tile toward the dock. Positions are in this window's coordinates;
+  // the dock sits directly below this window's bottom edge.
+  signal dragMoved(var app, real x, real y)
+  signal dragEnded(var app, real x, real y)
+
+  property var dragApp: null
+  property real dragX: 0
+  property real dragY: 0
+  readonly property bool dragging: dragApp !== null
 
   // Ids of apps currently pinned, so the menu can say Keep or Remove.
   property var pinnedIds: []
@@ -268,9 +277,42 @@ PanelWindow {
             id: cellMouse
             anchors.fill: parent
             hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: root.dragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+            property real pressX: 0
+            property real pressY: 0
+            property bool armed: false
+            property bool didDrag: false
+            onPressed: function(mouse) {
+              if (mouse.button !== Qt.LeftButton) return
+              var p = cellMouse.mapToItem(backdrop, mouse.x, mouse.y)
+              pressX = p.x; pressY = p.y; armed = true; didDrag = false
+            }
+            onPositionChanged: function(mouse) {
+              if (!armed || !(mouse.buttons & Qt.LeftButton)) return
+              var p = cellMouse.mapToItem(backdrop, mouse.x, mouse.y)
+              if (!root.dragging) {
+                if (Math.abs(p.x - pressX) < 8 && Math.abs(p.y - pressY) < 8) return
+                root.dragApp = cell.modelData
+                root.closeMenu()
+                didDrag = true
+              }
+              root.dragX = p.x; root.dragY = p.y
+              root.dragMoved(cell.modelData, p.x, p.y)
+            }
+            onReleased: function(mouse) {
+              if (mouse.button !== Qt.LeftButton) return
+              armed = false
+              if (root.dragging) {
+                var p = cellMouse.mapToItem(backdrop, mouse.x, mouse.y)
+                var app = root.dragApp
+                root.dragApp = null
+                root.dragEnded(app, p.x, p.y)
+              }
+            }
+            onCanceled: { armed = false; if (root.dragging) { var app = root.dragApp; root.dragApp = null; root.dragEnded(app, -1, -1) } }
             onClicked: function(mouse) {
+              if (didDrag) { didDrag = false; return }
               if (mouse.button === Qt.RightButton) {
                 var p = cellMouse.mapToItem(backdrop, mouse.x, mouse.y)
                 root.openMenu(cell.modelData, p.x, p.y)
@@ -298,6 +340,21 @@ PanelWindow {
         font.pixelSize: Math.round(15 * root.textScale)
         color: Qt.rgba(1, 1, 1, 0.45)
       }
+    }
+
+    // Ghost of the tile being dragged, following the pointer (clamped to the
+    // bottom edge once the pointer is over the dock).
+    DockTile {
+      visible: root.dragging
+      z: 100
+      size: 62
+      x: root.dragX - 31
+      y: Math.min(root.dragY - 31, backdrop.height - 62)
+      opacity: 0.92
+      scale: 1.06
+      iconSource: root.dragApp ? root.dragApp.icon : ""
+      appName: root.dragApp ? root.dragApp.name : ""
+      fontFamily: root.fontFamily
     }
 
     // Right-click menu for a tile: Open, Keep in Dock / Remove from Dock.

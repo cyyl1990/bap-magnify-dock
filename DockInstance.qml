@@ -764,7 +764,7 @@ Item {
   }
 
   function updateMagnification() {
-    if (root.draggingPinnedIndex >= 0) return
+    if (root.draggingPinnedIndex >= 0 || root.dropIndex >= 0) return
     if (!root.isDockHovered || root.hoverCursorX < 0) {
       root.launcherScale = 1.0
       root.launcherOffsetX = 0
@@ -862,6 +862,80 @@ Item {
     function onAppsChanged() { root.rebuildDock() }
   }
 
+  // ---- Drop target for tiles dragged out of the app drawer ----
+  property int dropIndex: -1      // insertion index into the pinned group, -1 = none
+  property var dropApp: null
+
+  function clearDrop() {
+    if (root.dropIndex < 0 && !root.dropApp) return
+    root.dropIndex = -1
+    root.dropApp = null
+    root.launcherOffsetX = 0
+    root.pinnedOffsets = []
+    root.unpinnedOffsets = []
+    root.extraCapsuleWidth = 0
+    root.updateMagnification()
+  }
+
+  function drawerDragMoved(app, x, y) {
+    var geo = root.baselineGeometry
+    if (!geo) return
+    var overDock = y >= appDrawer.height - 6
+    var capsuleLeft = (dockPanel.width - dockCapsule.width) / 2
+    var localX = x - capsuleLeft
+    if (!overDock || localX < -40 || localX > dockCapsule.width + 40) { root.clearDrop(); return }
+    var idx = 0
+    for (var i = 0; i < geo.pinned.length; i++) if (localX > geo.pinned[i] + root.extraCapsuleWidth / 2) idx = i + 1
+    if (idx === root.dropIndex && root.dropApp === app) return
+    root.dropApp = app
+    root.dropIndex = idx
+    root.revealDock()
+    var slot = root.baseIconSize + root.itemSpacing
+    root.launcherScale = 1
+    root.pinnedScales = []
+    root.unpinnedScales = []
+    root.launcherOffsetX = -slot / 2
+    var offs = []
+    for (var j = 0; j < geo.pinned.length; j++) offs.push(j < idx ? -slot / 2 : slot / 2)
+    root.pinnedOffsets = offs
+    var uoffs = []
+    for (var u = 0; u < geo.unpinned.length; u++) uoffs.push(slot / 2)
+    root.unpinnedOffsets = uoffs
+    root.extraCapsuleWidth = slot
+  }
+
+  // Centre of the open gap in capsule coordinates.
+  readonly property real dropSlotCenterX: {
+    var geo = root.baselineGeometry
+    if (!geo || root.dropIndex < 0) return 0
+    var slot = root.baseIconSize + root.itemSpacing
+    var n = geo.pinned.length
+    var base = root.dropIndex < n ? geo.pinned[root.dropIndex] - slot / 2
+      : (n > 0 ? geo.pinned[n - 1] + slot / 2 : geo.launcher + slot / 2 + root.separatorWidth + root.itemSpacing)
+    return base + root.extraCapsuleWidth / 2
+  }
+
+  function drawerDragEnded(app, x, y) {
+    var idx = root.dropIndex
+    var wasOver = idx >= 0
+    root.clearDrop()
+    if (!wasOver || !app || !app.id) return
+    var list = (Array.isArray(root.customPinnedApps) ? root.customPinnedApps : DockModel.defaultPinnedApps).slice()
+    for (var i = list.length - 1; i >= 0; i--) {
+      var pid = typeof list[i] === "string" ? list[i] : (list[i].id || "")
+      if (pid === app.id || DockModel.matchApp(pid, app.id)) {
+        list.splice(i, 1)
+        if (i < idx) idx--
+      }
+    }
+    idx = Math.max(0, Math.min(list.length, idx))
+    list.splice(idx, 0, app.id)
+    root.customPinnedApps = list
+    root.saveConfig()
+    root.rebuildDock()
+    appDrawer.close()
+  }
+
   function toggleDrawer() {
     if (appDrawer.open) { appDrawer.close(); return }
     root.closeContextMenu()
@@ -894,6 +968,8 @@ Item {
     backdropColor: root.drawerColor
     bottomInset: dockPanel.implicitHeight
     pinnedIds: root.dockData.pinned.map(function(p) { return p.id })
+    onDragMoved: function(app, x, y) { root.drawerDragMoved(app, x, y) }
+    onDragEnded: function(app, x, y) { root.drawerDragEnded(app, x, y) }
     onPinToggleRequested: function(app) { if (app && app.id) root.togglePinApp(app.id) }
     onDrawerClosed: root.scheduleDockHide()
   }
@@ -1265,6 +1341,20 @@ Item {
         GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.14) }
         GradientStop { position: 0.06; color: "transparent" }
         }
+      }
+
+      // Preview of a tile being dropped in from the drawer, shown in the gap.
+      DockTile {
+        visible: root.dropIndex >= 0 && root.dropApp !== null
+        z: 5
+        size: root.iconPixelSize
+        x: root.dropSlotCenterX - root.iconPixelSize / 2
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 13
+        opacity: 0.75
+        iconSource: root.dropApp ? root.dropApp.icon : ""
+        appName: root.dropApp ? root.dropApp.name : ""
+        fontFamily: root.fontFamily
       }
 
       // Main Items Content Row
