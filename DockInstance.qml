@@ -34,10 +34,10 @@ Item {
   property real layoutExpansionRatio: 0.82
   property int magnificationDuration: 90
   readonly property real textScale: root.preferences.textScale || 1
-  // The opacity slider is mapped through a square curve so it reads evenly:
-  // 50% on the slider is about a quarter alpha, which looks half see-through
-  // over a dark tint; 100% stays fully solid.
-  readonly property real surfaceAlpha: Math.pow(Math.max(0, Math.min(1, root.preferences.opacity)), 2)
+  // The opacity slider is mapped through a square-root curve so the low end
+  // still leaves the surfaces readable: 100% is solid, 50% is about 0.71
+  // alpha, 20% is about 0.45. Fully see-through is deliberately not reachable.
+  readonly property real surfaceAlpha: Math.sqrt(Math.max(0, Math.min(1, root.preferences.opacity)))
   readonly property color dockColor: root.preferences.dockColor || "#12141a"
   readonly property color drawerColor: root.preferences.drawerColor || "#0a0c11"
   // Popups sit a touch lighter than the capsule, as in the design (24,26,33 vs 18,20,26).
@@ -880,7 +880,7 @@ Item {
     function settings(): string { if (root.settingsOpen) root.closeSettings(); else root.openSettings(); return root.settingsOpen ? "open" : "closed" }
     function autoHide(): string { root.autoHide = !root.autoHide; root.saveConfig(); return root.autoHide ? "on" : "off" }
     function status(): string {
-      return JSON.stringify({ screen: root.dockScreen ? root.dockScreen.name : "", pinned: root.dockData.pinned.length, running: root.dockData.unpinned.length, autoHide: root.autoHide, reserveSpace: root.reserveSpace, drawer: appDrawer.open, settings: root.settingsOpen })
+      return JSON.stringify({ screen: root.dockScreen ? root.dockScreen.name : "", pinned: root.dockData.pinned.length, running: root.dockData.unpinned.length, autoHide: root.autoHide, reserveSpace: root.reserveSpace, drawer: appDrawer.open, settings: root.settingsOpen, opacitySetting: root.preferences.opacity, surfaceAlpha: root.surfaceAlpha })
     }
   }
 
