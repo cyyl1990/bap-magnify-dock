@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import qs.Commons
+import "DockModel.js" as DockModel
 
 // Settings card, per the design: 340px glass, "Dock Settings" header with a
 // close control, Appearance sliders, a segmented "Windows shown" control,
@@ -15,6 +16,8 @@ DockGlass {
   property color accent: Color.accent
   property string fontFamily: Style.font.family
   readonly property real textScale: settings && settings.textScale ? settings.textScale : 1
+  readonly property var colorPresets: DockModel.colorPresets
+  readonly property var accentPresets: DockModel.accentPresets
 
   signal preferenceChanged(string key, var value)
   signal autoHideToggled()
@@ -22,7 +25,7 @@ DockGlass {
   signal dismissed()
 
   open: visible
-  width: 340
+  width: Math.round(340 * Math.max(1, Math.min(1.25, textScale)))
   height: Math.min(maxHeight, flick.contentHeight)
 
   function w(a) { return Qt.rgba(1, 1, 1, a) }
@@ -51,7 +54,7 @@ DockGlass {
           anchors.verticalCenterOffset: 4
           text: "Dock Settings"
           font.family: root.fontFamily
-          font.pixelSize: 15
+          font.pixelSize: Math.round(15 * root.textScale)
           font.weight: Font.DemiBold
           color: "#ffffff"
         }
@@ -68,7 +71,7 @@ DockGlass {
             anchors.centerIn: parent
             text: "×"
             font.family: root.fontFamily
-            font.pixelSize: 16
+            font.pixelSize: Math.round(16 * root.textScale)
             color: closeMouse.containsMouse ? "#ffffff" : root.w(0.55)
           }
           MouseArea {
@@ -92,7 +95,7 @@ DockGlass {
         Text {
           text: "APPEARANCE"
           font.family: root.fontFamily
-          font.pixelSize: 10
+          font.pixelSize: Math.round(10 * root.textScale)
           font.weight: Font.DemiBold
           font.letterSpacing: 1.3
           color: root.w(0.38)
@@ -106,7 +109,7 @@ DockGlass {
             { key: "magnification", label: "Magnification", min: 1, max: 2, step: 0.05, fmt: "x" },
             { key: "spacing", label: "Spacing", min: 2, max: 16, step: 1, fmt: "px" },
             { key: "opacity", label: "Background opacity", min: 0.2, max: 1, step: 0.02, fmt: "%" },
-            { key: "textScale", label: "Text size", min: 0.85, max: 1.3, step: 0.05, fmt: "%" }
+            { key: "textScale", label: "Text size", min: 0.8, max: 1.6, step: 0.05, fmt: "%" }
           ]
           delegate: Column {
             id: settingRow
@@ -131,7 +134,7 @@ DockGlass {
                 anchors.baseline: parent.bottom
                 text: settingRow.modelData.label
                 font.family: root.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Math.round(13 * root.textScale)
                 font.weight: Font.Medium
                 color: root.w(0.85)
               }
@@ -140,7 +143,7 @@ DockGlass {
                 anchors.baseline: parent.bottom
                 text: settingRow.display(control.value)
                 font.family: root.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Math.round(12 * root.textScale)
                 font.weight: Font.Medium
                 color: root.w(0.5)
               }
@@ -185,11 +188,118 @@ DockGlass {
           }
         }
 
+
+        // Colors
+        Text {
+          text: "COLORS"
+          font.family: root.fontFamily
+          font.pixelSize: Math.round(10.5 * root.textScale)
+          font.weight: Font.DemiBold
+          font.letterSpacing: 1.3
+          color: root.w(0.38)
+          topPadding: 18
+          bottomPadding: 6
+        }
+        Repeater {
+          model: [
+            { key: "dockColor", label: "Dock", presets: root.colorPresets, allowTheme: false },
+            { key: "drawerColor", label: "Drawer", presets: root.colorPresets, allowTheme: false },
+            { key: "accentColor", label: "Accent", presets: root.accentPresets, allowTheme: true }
+          ]
+          delegate: Column {
+            id: colorRow
+            required property var modelData
+            readonly property string current: String(root.settings[modelData.key] || "")
+            width: column.width - 36
+            topPadding: 6
+            bottomPadding: 4
+            spacing: 7
+
+            Text {
+              text: colorRow.modelData.label
+              font.family: root.fontFamily
+              font.pixelSize: Math.round(13 * root.textScale)
+              font.weight: Font.Medium
+              color: root.w(0.85)
+            }
+
+            Row {
+              spacing: 8
+              // "Theme" swatch for the accent: follow the Omarchy theme.
+              Rectangle {
+                visible: colorRow.modelData.allowTheme
+                width: 26; height: 26; radius: 13
+                color: root.accent
+                border.width: colorRow.current === "" ? 2 : 1
+                border.color: colorRow.current === "" ? "#ffffff" : root.w(0.25)
+                Text {
+                  anchors.centerIn: parent
+                  text: "T"
+                  font.family: root.fontFamily
+                  font.pixelSize: Math.round(11 * root.textScale)
+                  font.weight: Font.DemiBold
+                  color: "#ffffff"
+                }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.preferenceChanged(colorRow.modelData.key, "") }
+              }
+              Repeater {
+                model: colorRow.modelData.presets
+                delegate: Rectangle {
+                  id: swatch
+                  required property string modelData
+                  readonly property bool selected: colorRow.current === modelData.toLowerCase()
+                  width: 26; height: 26; radius: 13
+                  color: modelData
+                  border.width: selected ? 2 : 1
+                  border.color: selected ? "#ffffff" : root.w(0.25)
+                  MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.preferenceChanged(colorRow.modelData.key, swatch.modelData) }
+                }
+              }
+            }
+
+            Rectangle {
+              width: parent.width
+              height: Math.round(30 * root.textScale)
+              radius: 8
+              color: root.w(0.08)
+              border.width: 1
+              border.color: hexInput.activeFocus ? root.w(0.35) : root.w(0.12)
+              TextInput {
+                id: hexInput
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                verticalAlignment: TextInput.AlignVCenter
+                font.family: root.fontFamily
+                font.pixelSize: Math.round(12.5 * root.textScale)
+                color: "#ffffff"
+                selectionColor: root.w(0.25)
+                maximumLength: 7
+                text: colorRow.current
+                onActiveFocusChanged: if (!activeFocus) text = colorRow.current
+                onAccepted: {
+                  var v = text.trim()
+                  if (/^#[0-9a-fA-F]{6}$/.test(v) || (colorRow.modelData.allowTheme && v === "")) root.preferenceChanged(colorRow.modelData.key, v)
+                  else text = colorRow.current
+                }
+                Text {
+                  visible: hexInput.text.length === 0 && !hexInput.activeFocus
+                  anchors.fill: parent
+                  verticalAlignment: Text.AlignVCenter
+                  text: colorRow.modelData.allowTheme ? "theme accent, or #RRGGBB" : "#RRGGBB"
+                  font: hexInput.font
+                  color: root.w(0.35)
+                }
+              }
+            }
+          }
+        }
+
         // Windows shown
         Text {
           text: "WINDOWS SHOWN"
           font.family: root.fontFamily
-          font.pixelSize: 10
+          font.pixelSize: Math.round(10 * root.textScale)
           font.weight: Font.DemiBold
           font.letterSpacing: 1.3
           color: root.w(0.38)
@@ -223,7 +333,7 @@ DockGlass {
                   anchors.centerIn: parent
                   text: seg.modelData.label
                   font.family: root.fontFamily
-                  font.pixelSize: 12
+                  font.pixelSize: Math.round(12 * root.textScale)
                   font.weight: Font.Medium
                   color: seg.selected ? "#ffffff" : root.w(0.55)
                 }
@@ -243,7 +353,7 @@ DockGlass {
         Text {
           text: "BEHAVIOR"
           font.family: root.fontFamily
-          font.pixelSize: 10
+          font.pixelSize: Math.round(10 * root.textScale)
           font.weight: Font.DemiBold
           font.letterSpacing: 1.3
           color: root.w(0.38)
@@ -271,7 +381,7 @@ DockGlass {
               Text {
                 text: toggleRow.modelData.label
                 font.family: root.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Math.round(13 * root.textScale)
                 font.weight: Font.Medium
                 color: root.w(0.85)
               }
@@ -280,7 +390,7 @@ DockGlass {
                 text: toggleRow.modelData.sub
                 wrapMode: Text.WordWrap
                 font.family: root.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Math.round(12 * root.textScale)
                 color: root.w(0.42)
               }
             }
@@ -333,7 +443,7 @@ DockGlass {
         wrapMode: Text.WordWrap
         text: "Changes apply live and save to dock-pinned-macos.json"
         font.family: root.fontFamily
-        font.pixelSize: 11
+        font.pixelSize: Math.round(11 * root.textScale)
         color: root.w(0.35)
       }
     }

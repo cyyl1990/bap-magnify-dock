@@ -20,6 +20,7 @@ PanelWindow {
   // Follows the dock's "Background opacity" setting: a solid backdrop at
   // 100%, more see-through as it is lowered.
   property real backdropOpacity: 0.9
+  property color backdropColor: "#0a0c11"
   // Height of the dock's own window; the drawer stops above it so the dock
   // stays visible and clickable while the drawer is open, as in the design.
   property real bottomInset: 0
@@ -60,7 +61,7 @@ PanelWindow {
   Rectangle {
     id: backdrop
     anchors.fill: parent
-    color: Qt.rgba(10 / 255, 12 / 255, 17 / 255, root.backdropOpacity)
+    color: Qt.rgba(root.backdropColor.r, root.backdropColor.g, root.backdropColor.b, root.backdropOpacity)
     opacity: root.open ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutQuad } }
 
@@ -78,7 +79,7 @@ PanelWindow {
       anchors.topMargin: Math.round(parent.height * 0.07)
       anchors.horizontalCenter: parent.horizontalCenter
       width: Math.min(560, parent.width * 0.8)
-      height: 54
+      height: Math.round(54 * Math.max(1, root.textScale))
       radius: 14
       color: Qt.rgba(1, 1, 1, 0.09)
       border.width: 1
@@ -116,7 +117,7 @@ PanelWindow {
         anchors.rightMargin: 12
         anchors.verticalCenter: parent.verticalCenter
         font.family: root.fontFamily
-        font.pixelSize: 20
+        font.pixelSize: Math.round(20 * root.textScale)
         color: "#ffffff"
         selectionColor: Qt.rgba(1, 1, 1, 0.25)
         clip: true
@@ -181,7 +182,7 @@ PanelWindow {
         anchors.leftMargin: 10
         text: root.query.trim().length > 0 ? "RESULTS" : "ALL APPLICATIONS"
         font.family: root.fontFamily
-        font.pixelSize: 11
+        font.pixelSize: Math.round(11 * root.textScale)
         font.weight: Font.DemiBold
         font.letterSpacing: 1.5
         color: Qt.rgba(1, 1, 1, 0.42)
@@ -259,7 +260,7 @@ PanelWindow {
         anchors.horizontalCenter: parent.horizontalCenter
         text: "No applications match “" + root.query + "”"
         font.family: root.fontFamily
-        font.pixelSize: 15
+        font.pixelSize: Math.round(15 * root.textScale)
         color: Qt.rgba(1, 1, 1, 0.45)
       }
     }

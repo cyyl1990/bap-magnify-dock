@@ -34,7 +34,11 @@ Item {
   property real layoutExpansionRatio: 0.82
   property int magnificationDuration: 90
   readonly property real textScale: root.preferences.textScale || 1
-  readonly property color accent: Color.accent
+  readonly property color dockColor: root.preferences.dockColor || "#12141a"
+  readonly property color drawerColor: root.preferences.drawerColor || "#0a0c11"
+  // Popups sit a touch lighter than the capsule, as in the design (24,26,33 vs 18,20,26).
+  readonly property color glassColor: Qt.lighter(root.dockColor, 1.25)
+  readonly property color accent: root.preferences.accentColor ? root.preferences.accentColor : Color.accent
   readonly property string pluginDir: Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "").replace(/\/$/, "")
   // Instrument Sans (OFL) ships with the plugin; fall back to the shell font.
   FontLoader { id: dockFont; source: Qt.resolvedUrl("fonts/InstrumentSans.ttf") }
@@ -883,6 +887,7 @@ Item {
     textScale: root.textScale
     fontFamily: root.fontFamily
     backdropOpacity: root.preferences.opacity
+    backdropColor: root.drawerColor
     bottomInset: dockPanel.implicitHeight
     onDrawerClosed: root.scheduleDockHide()
   }
@@ -982,7 +987,7 @@ Item {
         implicitWidth: tooltipLabel.implicitWidth + 22
         implicitHeight: tooltipLabel.implicitHeight + 10
         radius: 8
-        color: Qt.rgba(24 / 255, 26 / 255, 33 / 255, Math.max(0.9, root.preferences.opacity))
+        color: Qt.rgba(root.glassColor.r, root.glassColor.g, root.glassColor.b, Math.max(0.9, root.preferences.opacity))
         border.color: Qt.rgba(1, 1, 1, 0.13)
         border.width: 1
 
@@ -1022,6 +1027,7 @@ Item {
         accent: root.accent
         fontFamily: root.fontFamily
         glassOpacity: root.preferences.opacity
+        glassColor: root.glassColor
         maxHeight: Math.max(120, (root.dockScreen ? root.dockScreen.height : 720) - dockPanel.height - 32)
         onContainsPointerChanged: {
           if (containsPointer) pickerHideTimer.stop()
@@ -1060,6 +1066,7 @@ Item {
         accent: root.accent
         fontFamily: root.fontFamily
         glassOpacity: root.preferences.opacity
+        glassColor: root.glassColor
         maxHeight: Math.max(180, (root.dockScreen ? root.dockScreen.height : 720) - dockPanel.height - 32)
         onPreferenceChanged: function(key, value) { root.changePreference(key, value) }
         onAutoHideToggled: { root.autoHide = !root.autoHide; root.saveConfig() }
@@ -1105,6 +1112,7 @@ Item {
         textScale: root.textScale
         fontFamily: root.fontFamily
         glassOpacity: root.preferences.opacity
+        glassColor: root.glassColor
 
         onLaunchClicked: function(item) {
           DockModel.handleItemClick(item, Util, root.appLibrary, DesktopEntries)
@@ -1239,7 +1247,7 @@ Item {
         }
       }
 
-      color: Qt.rgba(18 / 255, 20 / 255, 26 / 255, root.preferences.opacity)
+      color: Qt.rgba(root.dockColor.r, root.dockColor.g, root.dockColor.b, root.preferences.opacity)
       border.color: Qt.rgba(1, 1, 1, 0.13)
       border.width: 1
 

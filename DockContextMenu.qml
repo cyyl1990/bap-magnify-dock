@@ -51,7 +51,7 @@ DockGlass {
 
   open: isOpen
   visible: isOpen
-  width: 226
+  width: Math.round(226 * Math.max(1, Math.min(1.3, textScale)))
   height: column.implicitHeight + 10
 
   HoverHandler { id: menuHover }

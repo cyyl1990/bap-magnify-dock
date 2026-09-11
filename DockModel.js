@@ -2,8 +2,16 @@
 
 var defaultSettings = {
   iconSize: 38, magnification: 1.7, spacing: 8, opacity: 0.72, textScale: 1,
-  revealDelay: 0, hideDelay: 220, windowScope: "all"
+  revealDelay: 0, hideDelay: 220, windowScope: "all",
+  dockColor: "#12141a", drawerColor: "#0a0c11", accentColor: ""
 };
+
+var colorPresets = ["#12141a", "#0a0c11", "#1e1e2e", "#24283b", "#1b2a2f", "#2b1d2e", "#3a2a1a", "#000000"];
+var accentPresets = ["#6FA8FF", "#9D8CFF", "#5BD6A9", "#FFB16E"];
+
+function isHexColor(v) {
+  return typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
+}
 
 // Layout constants from the Magnify Dock design.
 var railPadding = 12;      // horizontal inset of the first/last slot
@@ -14,7 +22,7 @@ function normalizeSettings(input) {
   var result = {};
   var ranges = {
     iconSize: [24, 64], magnification: [1, 2], spacing: [2, 16],
-    opacity: [0.2, 1], textScale: [0.85, 1.3], revealDelay: [0, 1000], hideDelay: [100, 2000]
+    opacity: [0.2, 1], textScale: [0.8, 1.6], revealDelay: [0, 1000], hideDelay: [100, 2000]
   };
   for (var key in ranges) {
     var value = input[key];
@@ -24,6 +32,10 @@ function normalizeSettings(input) {
   }
   result.windowScope = ["all", "monitor", "workspace"].indexOf(input.windowScope) >= 0
     ? input.windowScope : "all";
+  result.dockColor = isHexColor(input.dockColor) ? input.dockColor.toLowerCase() : defaultSettings.dockColor;
+  result.drawerColor = isHexColor(input.drawerColor) ? input.drawerColor.toLowerCase() : defaultSettings.drawerColor;
+  // Empty accent means "follow the Omarchy theme accent".
+  result.accentColor = isHexColor(input.accentColor) ? input.accentColor.toLowerCase() : "";
   return result;
 }
 

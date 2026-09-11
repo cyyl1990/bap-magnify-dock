@@ -21,7 +21,7 @@ DockGlass {
   signal dismissed()
 
   open: visible
-  width: 280
+  width: Math.round(280 * Math.max(1, Math.min(1.3, textScale)))
   height: Math.min(maxHeight, header.height + list.contentHeight + 12)
 
   HoverHandler { id: hover }

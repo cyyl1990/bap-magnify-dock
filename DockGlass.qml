@@ -11,6 +11,7 @@ Item {
   property bool open: false
   property real radius: 14
   property real glassOpacity: 0.82
+  property color glassColor: Qt.rgba(24 / 255, 26 / 255, 33 / 255, 1)
   default property alias content: contentHolder.data
 
   implicitWidth: contentHolder.implicitWidth
@@ -39,7 +40,7 @@ Item {
   Rectangle {
     anchors.fill: parent
     radius: root.radius
-    color: Qt.rgba(24 / 255, 26 / 255, 33 / 255, root.glassOpacity)
+    color: Qt.rgba(root.glassColor.r, root.glassColor.g, root.glassColor.b, root.glassOpacity)
     border.width: 1
     border.color: Qt.rgba(1, 1, 1, 0.13)
 
