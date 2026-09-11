@@ -18,13 +18,14 @@ DockGlass {
   property color accent: Color.accent
   property string fontFamily: Style.font.family
   property bool previews: true
+  property real previewSize: 220
   readonly property bool containsPointer: hover.hovered
 
   signal windowActivated(var win)
   signal windowClosed(var win)
   signal dismissed()
 
-  readonly property int cardSize: Math.round(220 * textScale)      // square thumbnail box
+  readonly property int cardSize: Math.round(previewSize)          // square thumbnail box, from settings
   readonly property int cardW: cardSize + 16
   readonly property int cardH: cardSize + Math.round(42 * textScale) + 14
   readonly property int cardGap: 8
