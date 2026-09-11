@@ -20,11 +20,22 @@ DockGlass {
   signal muteAudioToggled(var item)
   signal menuClosed()
   signal settingsRequested()
+  // Non-app tiles (folders, trash) supply their own rows: [{label, action}].
+  property var customEntries: null
+  signal customAction(string action, var item)
 
   readonly property bool running: targetItem ? targetItem.isRunning === true : false
   readonly property bool pinned: targetItem ? targetItem.isPinned === true : false
   readonly property var entries: {
     var rows = []
+    if (Array.isArray(root.customEntries)) {
+      for (var c = 0; c < root.customEntries.length; c++) {
+        rows.push({ kind: "item", label: root.customEntries[c].label, hint: "", action: "custom:" + root.customEntries[c].action })
+      }
+      rows.push({ kind: "divider" })
+      rows.push({ kind: "item", label: "Dock Settings…", hint: "", action: "settings" })
+      return rows
+    }
     if (root.targetItem) {
       rows.push({ kind: "item", label: root.running ? "Bring to Front" : "Open", hint: "", action: "launch" })
       rows.push({ kind: "item", label: root.pinned ? "Remove from Dock" : "Keep in Dock", hint: root.pinned ? "✓" : "", action: "pin" })
@@ -42,6 +53,7 @@ DockGlass {
   function activate(action) {
     var item = root.targetItem
     root.menuClosed()
+    if (String(action).indexOf("custom:") === 0) { root.customAction(String(action).substring(7), item); return }
     if (action === "launch") root.launchClicked(item)
     else if (action === "pin") root.pinToggled(item)
     else if (action === "mute") root.muteAudioToggled(item)

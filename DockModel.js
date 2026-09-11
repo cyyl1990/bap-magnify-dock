@@ -7,7 +7,16 @@ var defaultSettings = {
   windowPreviews: true, previewWidth: 220, previewHeight: 220,
   themeColors: true, recentApps: false, recentCount: 4,
   tileShape: "rounded",
-  showBackground: true, collapsible: false
+  showBackground: true, collapsible: false,
+  badges: true, showTrash: false, folders: []
+};
+
+// Folder icons by well-known basename; anything else gets the plain folder.
+var folderIconByName = {
+  "downloads": "folder-download", "documents": "folder-documents", "pictures": "folder-pictures",
+  "music": "folder-music", "videos": "folder-videos", "desktop": "user-desktop",
+  "public": "folder-publicshare", "templates": "folder-templates", "projects": "folder-development",
+  "code": "folder-development", "src": "folder-development"
 };
 
 var colorPresets = ["#12141a", "#0a0c11", "#1e1e2e", "#24283b", "#1b2a2f", "#2b1d2e", "#3a2a1a", "#000000"];
@@ -48,7 +57,87 @@ function normalizeSettings(input) {
   result.tileShape = ["rounded", "circle", "square"].indexOf(input.tileShape) >= 0 ? input.tileShape : "rounded";
   result.showBackground = typeof input.showBackground === "boolean" ? input.showBackground : defaultSettings.showBackground;
   result.collapsible = typeof input.collapsible === "boolean" ? input.collapsible : defaultSettings.collapsible;
+  result.badges = typeof input.badges === "boolean" ? input.badges : defaultSettings.badges;
+  result.showTrash = typeof input.showTrash === "boolean" ? input.showTrash : defaultSettings.showTrash;
+  result.folders = normalizeFolders(input.folders);
   return result;
+}
+
+// Folder tiles: absolute paths, trimmed, no duplicates, at most eight.
+function normalizeFolders(list) {
+  if (!Array.isArray(list)) return [];
+  var out = [];
+  for (var i = 0; i < list.length && out.length < 8; i++) {
+    var p = String(list[i] || "").trim().replace(/\/+$/, "");
+    if (p.charAt(0) !== "/" || out.indexOf(p) >= 0) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+function folderName(path, home) {
+  var clean = String(path || "").replace(/\/+$/, "");
+  if (home && clean === String(home).replace(/\/+$/, "")) return "Home";
+  var base = clean.substring(clean.lastIndexOf("/") + 1);
+  return base || "/";
+}
+
+function folderIcon(path, home) {
+  var clean = String(path || "").replace(/\/+$/, "");
+  if (home && clean === String(home).replace(/\/+$/, "")) return "user-home";
+  var base = clean.substring(clean.lastIndexOf("/") + 1).toLowerCase();
+  return folderIconByName[base] || "folder";
+}
+
+// The rail's last group: pinned folders, then the trash. Built like app
+// items so DockItem can render them; "kind" tells the click handler apart.
+function buildExtraItems(folders, showTrash, trashFull, home) {
+  var out = [];
+  var list = normalizeFolders(folders);
+  for (var i = 0; i < list.length; i++) {
+    out.push({
+      kind: "folder", id: "folder:" + list[i], key: "folder:" + list[i], path: list[i],
+      name: folderName(list[i], home), icon: folderIcon(list[i], home),
+      isPinned: false, isRunning: false, isFocused: false, windows: []
+    });
+  }
+  if (showTrash) {
+    out.push({
+      kind: "trash", id: "trash", key: "trash", path: "trash:///",
+      name: trashFull ? "Trash (full)" : "Trash", icon: trashFull ? "user-trash-full" : "user-trash",
+      isPinned: false, isRunning: false, isFocused: false, windows: []
+    });
+  }
+  return out;
+}
+
+// ---------- badges ----------
+
+// com.canonical.Unity.LauncherEntry addresses apps as application://x.desktop.
+function badgeKey(appUri) {
+  return String(appUri || "").replace(/^application:\/\//, "").replace(desktopSuffixRe, "").toLowerCase();
+}
+
+// Find the badge an app reported, matching the same way pins match windows.
+function badgeForItem(badgeMap, item) {
+  if (!badgeMap || !item) return null;
+  var ids = [item.id];
+  if (item.desktopEntry && item.desktopEntry.id) ids.push(item.desktopEntry.id);
+  for (var key in badgeMap) {
+    for (var i = 0; i < ids.length; i++) {
+      if (ids[i] && (badgeKey(ids[i]) === key || matchApp(ids[i], key))) return badgeMap[key];
+    }
+  }
+  return null;
+}
+
+function hasUrgentWindow(item, urgentWindows) {
+  if (!item || !Array.isArray(urgentWindows) || urgentWindows.length === 0) return false;
+  var wins = toArray(item.windows);
+  for (var i = 0; i < wins.length; i++) {
+    if (urgentWindows.indexOf(wins[i]) >= 0) return true;
+  }
+  return false;
 }
 
 function windowMetadata(win, metadata) {
@@ -551,8 +640,9 @@ function computeMagnifiedOffsets(scales, baseSize, expansionRatio) {
 }
 
 // Calculate fixed unmagnified baseline coordinates
-function computeBaselineCenters(baseSize, spacing, pad, pinnedCount, unpinnedCount, sepWidth, recentCount) {
+function computeBaselineCenters(baseSize, spacing, pad, pinnedCount, unpinnedCount, sepWidth, recentCount, extraCount) {
   recentCount = typeof recentCount === "number" ? recentCount : 0;
+  extraCount = typeof extraCount === "number" ? extraCount : 0;
   var curX = pad;
   // A divider occupies its own width plus one spacing gap on its far side.
   sepWidth = (typeof sepWidth === "number" ? sepWidth : separatorWidth) + spacing;
@@ -592,6 +682,18 @@ function computeBaselineCenters(baseSize, spacing, pad, pinnedCount, unpinnedCou
     }
   }
 
+  // Folders and the trash, after their own divider
+  var extraCenters = [];
+  if (extraCount > 0) {
+    if (pinnedCount + unpinnedCount + recentCount > 0) {
+      curX += sepWidth;
+    }
+    for (var x = 0; x < extraCount; x++) {
+      extraCenters.push(curX + baseSize / 2);
+      curX += baseSize + spacing;
+    }
+  }
+
   var totalBaseWidth = curX - spacing + pad;
 
   return {
@@ -599,6 +701,7 @@ function computeBaselineCenters(baseSize, spacing, pad, pinnedCount, unpinnedCou
     pinned: pinnedCenters,
     unpinned: unpinnedCenters,
     recent: recentCenters,
+    extras: extraCenters,
     totalBaseWidth: totalBaseWidth
   };
 }

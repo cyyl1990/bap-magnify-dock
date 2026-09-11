@@ -18,7 +18,8 @@ omarchy plugin add https://github.com/marcho78/omarchy-magnify-dock.git --enable
 ```
 
 The dock appears at the bottom of every monitor. Right-click the launcher
-tile (the dotted square) for **Dock Settings**.
+tile (the dotted square) for **Dock Settings**, a wide dialog with pages for
+Appearance, Colors, Windows, Dock items, Behavior and Presets.
 
 If you had `wdg.dock` installed, disable it first with
 `omarchy plugin disable wdg.dock`. Both docks share the same config file,
@@ -45,6 +46,8 @@ Pick any key you like; the command toggles the drawer through the dock's IPC.
 | Unpin | Right-click and choose **Remove from Dock**, or middle-click a pinned tile. |
 | Close a window | Middle-click a running app, use the context menu, or the × on a preview card. |
 | Mute an app | Right-click and choose **Mute Audio**. |
+| Folder tile | Click opens the folder, hover lists its newest entries, middle-click or right-click removes it. |
+| Trash tile | Click opens the trash, right-click for Empty Trash. |
 | Settings | Right-click the launcher tile. |
 | Collapse the dock | Turn on **Collapse control** in settings, then click the arrow at the end of the rail. |
 
@@ -70,6 +73,14 @@ value.
 **Behavior**: auto-hide, reserve space, window previews, recent apps, dock
 background, collapse control.
 
+**Dock items**: recent apps group, badges, trash tile, collapse control, and
+folder tiles. Badges show the unread counts apps publish over D-Bus (the
+Unity LauncherEntry interface used by Telegram, Thunderbird, Discord, Slack
+and others) and a dot on windows that ask for attention. The trash tile
+switches icon when the trash has contents; click opens it, right-click offers
+Empty Trash. Folder tiles come from quick chips (Home, Downloads, …) or any
+path; click opens the folder, hovering lists its newest entries.
+
 **Presets**: type a name and press **Save** to snapshot the whole
 configuration (every setting above, auto-hide, reserve space, and the pinned
 apps). **Apply** restores a snapshot, × deletes it. Saving under an existing
@@ -80,7 +91,8 @@ separate from the live config, so you can copy that file to another machine.
 
 ```bash
 omarchy-shell magnify-dock drawer     # toggle the app drawer
-omarchy-shell magnify-dock settings   # toggle the settings card
+omarchy-shell magnify-dock settings   # toggle the settings dialog
+omarchy-shell magnify-dock settingsPage presets   # open a page: appearance, colors, windows, items, behavior, presets
 omarchy-shell magnify-dock autoHide   # toggle auto-hide
 omarchy-shell magnify-dock status     # JSON state
 omarchy-shell magnify-dock presets    # names of saved presets
@@ -97,6 +109,9 @@ for example `o.bind("SUPER + SHIFT + D", "Dock: work preset", "omarchy-shell mag
 * Omarchy with omarchy-shell (Quickshell) and Hyprland.
 * `wl-clipboard` for the copy actions in settings.
 * Python 3 and `pactl` for the per-app mute action (upstream's `dock-audio.py`).
+* Python 3 with GObject introspection (`python-gobject`, present on Omarchy)
+  for badges; without it the badge relay simply stays silent.
+* `gio` (GLib) for the trash tile's Empty Trash action.
 
 The plugin makes no network requests. It bundles the Instrument Sans font
 (SIL Open Font License, see `fonts/OFL.txt`).

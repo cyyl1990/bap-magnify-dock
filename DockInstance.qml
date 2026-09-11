@@ -67,6 +67,26 @@ Item {
   readonly property bool showBackground: root.preferences.showBackground !== false
   readonly property bool collapsible: root.preferences.collapsible === true
   readonly property bool folded: root.collapsed && root.collapsible
+  // Badges (Unity LauncherEntry counts keyed by app id) and urgent windows.
+  readonly property bool badgesOn: root.preferences.badges !== false
+  property var badgeMap: ({})
+  property var urgentWindows: []
+  function badgeCountFor(item, map) {
+    var b = DockModel.badgeForItem(map, item)
+    return b && b.visible && b.count > 0 ? b.count : 0
+  }
+  // Trash tile state and the folder stack popup.
+  readonly property string homeDir: Quickshell.env("HOME")
+  property bool trashFull: false
+  property bool folderOpen: false
+  property string folderPath: ""
+  property string folderTitle: ""
+  property string pendingFolderPath: ""
+  property string pendingFolderTitle: ""
+  property real folderAnchorX: 0
+  property real folderAnchorY: 0
+  property string settingsPage: "appearance"
+  onSettingsPageChanged: if (settingsPanel.page !== root.settingsPage) settingsPanel.page = root.settingsPage
   function toggleCollapsed() {
     root.collapsed = !root.collapsed
     root.saveConfig()
@@ -87,7 +107,7 @@ Item {
   property real pickerAnchorY: 0
   readonly property var hyprMonitor: root.dockScreen ? Hyprland.monitorFor(root.dockScreen) : null
   readonly property var activeWorkspace: root.hyprMonitor ? root.hyprMonitor.activeWorkspace : null
-  readonly property bool popupOpen: root.contextMenuOpen || root.pickerOpen || root.settingsOpen || appDrawer.open
+  readonly property bool popupOpen: root.contextMenuOpen || root.pickerOpen || root.settingsOpen || appDrawer.open || root.folderOpen
 
   onActiveWorkspaceChanged: Qt.callLater(root.rebuildDock)
   onHyprMonitorChanged: Qt.callLater(root.rebuildDock)
@@ -187,6 +207,8 @@ Item {
   property var unpinnedOffsets: []
   property var recentOffsets: []
   property real extraCapsuleWidth: 0
+  property var extraScales: []
+  property var extraOffsets: []
   property real animatedExtraCapsuleWidth: root.extraCapsuleWidth
 
   // Track fast pointer updates without restarting a discrete animation for
@@ -331,7 +353,97 @@ Item {
     }
   }
 
+  // ---- Folder and trash tiles ----
+  function openExtra(item) {
+    if (!item || !item.kind) return
+    if (!Util || typeof Util.execDetached !== "function") return
+    Util.execDetached("xdg-open " + Util.shellQuote(item.kind === "trash" ? "trash:///" : item.path))
+  }
+
+  function openPath(path) {
+    if (!path || !Util || typeof Util.execDetached !== "function") return
+    Util.execDetached("xdg-open " + Util.shellQuote(path))
+  }
+
+  function removeFolder(path) {
+    var list = (root.preferences.folders || []).filter(function(f) { return f !== path })
+    root.changePreference("folders", list)
+  }
+
+  function emptyTrash() {
+    if (!Util || typeof Util.execDetached !== "function") return
+    Util.execDetached("gio trash --empty; sleep 0.4")
+    trashRecheck.restart()
+  }
+  Timer { id: trashRecheck; interval: 900; onTriggered: trashProbe.running = true }
+
+  function extraMenuEntries(item) {
+    if (!item || !item.kind) return null
+    if (item.kind === "trash") {
+      return [{ label: "Open Trash", action: "open" }, { label: "Empty Trash", action: "empty" }]
+    }
+    return [{ label: "Open Folder", action: "open" }, { label: "Remove from Dock", action: "remove" }]
+  }
+
+  function handleExtraAction(action, item) {
+    if (!item) return
+    if (action === "open") root.openExtra(item)
+    else if (action === "empty") root.emptyTrash()
+    else if (action === "remove" && item.kind === "folder") root.removeFolder(item.path)
+  }
+
+  function requestExtraHover(item, target) {
+    if (root.settingsOpen || root.contextMenuOpen || root.draggingPinnedIndex >= 0) return
+    if (!item || item.kind !== "folder") {
+      root.closeFolderPopup()
+      root.requestTooltip(target, item ? item.name : "")
+      return
+    }
+    root.clearTooltip()
+    folderHideTimer.stop()
+    var point = dockPanel.contentItem.mapFromItem(target,
+      target.width / 2 + Number(target.animatedOffsetX || 0), -8)
+    root.folderAnchorX = point.x
+    root.folderAnchorY = point.y
+    root.pendingFolderPath = item.path
+    root.pendingFolderTitle = item.name
+    if (root.folderOpen) root.showFolderPopup()
+    else folderShowTimer.restart()
+  }
+
+  function releaseExtraHover(target) {
+    root.releaseTooltip(target)
+    folderShowTimer.stop()
+    root.pendingFolderPath = ""
+    if (root.folderOpen) folderHideTimer.restart()
+  }
+
+  function showFolderPopup() {
+    if (!root.pendingFolderPath) return
+    root.folderPath = root.pendingFolderPath
+    root.folderTitle = root.pendingFolderTitle
+    root.pendingFolderPath = ""
+    root.folderOpen = true
+    root.revealDock()
+  }
+
+  function closeFolderPopup() {
+    folderShowTimer.stop()
+    folderHideTimer.stop()
+    root.pendingFolderPath = ""
+    root.folderOpen = false
+    root.scheduleDockHide()
+  }
+
+  Timer { id: folderShowTimer; interval: 380; onTriggered: root.showFolderPopup() }
+  Timer {
+    id: folderHideTimer
+    interval: 320
+    onTriggered: if (!folderPopup.containsPointer) root.closeFolderPopup()
+  }
+
   function openContextMenu(item, target) {
+    root.closeFolderPopup()
     root.closePicker()
     root.clearTooltip()
     // Recreate the popup lifecycle for every request. Layer-shell geometry can
@@ -507,6 +619,48 @@ Item {
     id: audioSyncProc
     command: ["python3", root.dockAudioScript, "sync"]
   }
+
+  // Badge relay: apps announce unread counts on the session bus through
+  // com.canonical.Unity.LauncherEntry; the script prints one JSON line each.
+  Process {
+    id: badgeRelay
+    running: root.badgesOn
+    command: ["python3", root.pluginDir + "/dock-badges.py"]
+    stdout: SplitParser {
+      onRead: function(line) {
+        try {
+          var msg = JSON.parse(String(line))
+          if (!msg || typeof msg.app !== "string") return
+          var next = Object.assign({}, root.badgeMap)
+          if (msg.visible && msg.count > 0) next[msg.app] = msg
+          else if (msg.urgent) next[msg.app] = msg
+          else delete next[msg.app]
+          root.badgeMap = next
+        } catch (e) {}
+      }
+    }
+    onRunningChanged: if (!running) root.badgeMap = ({})
+  }
+
+  // Trash tile: full or empty, polled cheaply and re-checked when the dock is hovered.
+  Process {
+    id: trashProbe
+    command: ["sh", "-c", "ls -A \"$HOME/.local/share/Trash/files\" 2>/dev/null | head -1 | wc -l"]
+    stdout: SplitParser {
+      onRead: function(line) {
+        var full = parseInt(String(line).trim(), 10) > 0
+        if (full !== root.trashFull) { root.trashFull = full; root.rebuildDock() }
+      }
+    }
+  }
+  Timer {
+    interval: 20000
+    repeat: true
+    running: root.preferences.showTrash === true
+    triggeredOnStart: true
+    onTriggered: trashProbe.running = true
+  }
+  onIsDockHoveredChanged: if (isDockHovered && root.preferences.showTrash === true) trashProbe.running = true
 
   // Settings File Persistence
   readonly property string configPath: Quickshell.env("HOME") + "/.config/omarchy/dock-pinned-macos.json"
@@ -720,12 +874,17 @@ Item {
     data.recent = root.preferences.recentApps
       ? DockModel.buildRecentItems(root.recentIds, data, DesktopEntries, root.appLibrary, Quickshell, root.preferences.recentCount || 4)
       : []
+    data.extras = DockModel.buildExtraItems(root.preferences.folders, root.preferences.showTrash === true, root.trashFull, root.homeDir)
     root.dockData = data
+    root.urgentWindows = DockModel.toArray(Hyprland.toplevels.values)
+      .filter(function(win) { return win && win.urgent === true && win.wayland })
+      .map(function(win) { return win.wayland })
     if (root.pickerOpen) root.refreshPicker()
 
     var pCount = root.folded ? 0 : (data.pinned ? data.pinned.length : 0)
     var uCount = root.folded ? 0 : (data.unpinned ? data.unpinned.length : 0)
     var rCount = root.folded ? 0 : (data.recent ? data.recent.length : 0)
+    var xCount = root.folded ? 0 : (data.extras ? data.extras.length : 0)
     root.baselineGeometry = DockModel.computeBaselineCenters(
       root.baseIconSize,
       root.itemSpacing,
@@ -733,7 +892,8 @@ Item {
       pCount,
       uCount,
       root.separatorWidth,
-      rCount
+      rCount,
+      xCount
     )
 
     updateMagnification()
@@ -913,6 +1073,8 @@ Item {
       root.pinnedOffsets = []
       root.unpinnedOffsets = []
       root.recentOffsets = []
+      root.extraScales = []
+      root.extraOffsets = []
       root.extraCapsuleWidth = 0
       return
     }
@@ -964,7 +1126,18 @@ Item {
     }
     root.recentScales = rScales
 
-    var allScales = [root.launcherScale].concat(pScales).concat(uScales).concat(rScales)
+    var xScales = []
+    var extraCenters = geo.extras || []
+    for (var x = 0; x < extraCenters.length; x++) {
+      xScales.push(DockModel.scaleFromDistance(
+        Math.abs(baseCursorX - extraCenters[x]),
+        root.maxMagnification,
+        root.magnifyRadius
+      ))
+    }
+    root.extraScales = xScales
+
+    var allScales = [root.launcherScale].concat(pScales).concat(uScales).concat(rScales).concat(xScales)
     var offsets = DockModel.computeMagnifiedOffsets(
       allScales,
       root.baseIconSize,
@@ -973,7 +1146,8 @@ Item {
     root.launcherOffsetX = offsets.length > 0 ? offsets[0] : 0
     root.pinnedOffsets = offsets.slice(1, 1 + pScales.length)
     root.unpinnedOffsets = offsets.slice(1 + pScales.length, 1 + pScales.length + uScales.length)
-    root.recentOffsets = offsets.slice(1 + pScales.length + uScales.length)
+    root.recentOffsets = offsets.slice(1 + pScales.length + uScales.length, 1 + pScales.length + uScales.length + rScales.length)
+    root.extraOffsets = offsets.slice(1 + pScales.length + uScales.length + rScales.length)
     root.extraCapsuleWidth = (typeof offsets.totalExtra === "number") ? offsets.totalExtra : 0
   }
 
@@ -989,6 +1163,7 @@ Item {
       // window list cares. Terminals retitle every second, so keep this cheap.
       function onTitleChanged() { titleRefreshTimer.restart() }
       function onWaylandHandleChanged() { Qt.callLater(root.rebuildDock) }
+      function onUrgentChanged() { Qt.callLater(root.rebuildDock) }
     }
   }
   Connections {
@@ -1124,6 +1299,7 @@ Item {
     function drawer(): string { root.toggleDrawer(); return appDrawer.open ? "open" : "closed" }
     function settings(): string { if (root.settingsOpen) root.closeSettings(); else root.openSettings(); return root.settingsOpen ? "open" : "closed" }
     function autoHide(): string { root.autoHide = !root.autoHide; root.saveConfig(); return root.autoHide ? "on" : "off" }
+    function settingsPage(name: string): string { root.settingsPage = String(name || "appearance"); root.openSettings(); return root.settingsPage }
     function preset(name: string): string { return root.applyPreset(name) ? "applied" : "no such preset" }
     function savePreset(name: string): string { return root.savePreset(name) ? "saved" : "name required" }
     function deletePreset(name: string): string { return root.deletePreset(name) ? "deleted" : "no such preset" }
@@ -1347,6 +1523,8 @@ Item {
         onAutoHideToggled: { root.autoHide = !root.autoHide; root.saveConfig() }
         onReserveSpaceToggled: { root.reserveSpace = !root.reserveSpace; root.saveConfig() }
         presets: root.presets
+        Component.onCompleted: page = root.settingsPage
+        onPageChanged: if (root.settingsPage !== page) root.settingsPage = page
         onPresetSaved: function(name) { root.savePreset(name) }
         onPresetApplied: function(name) { root.applyPreset(name) }
         onPresetDeleted: function(name) { root.deletePreset(name) }
@@ -1408,6 +1586,45 @@ Item {
         }
         onSettingsRequested: root.openSettings()
         onMenuClosed: root.closeContextMenu()
+        customEntries: root.extraMenuEntries(root.contextTarget)
+        onCustomAction: function(action, item) { root.handleExtraAction(action, item) }
+      }
+    }
+
+    // Folder stack popup, anchored above the hovered folder tile like the window picker.
+    PopupWindow {
+      id: folderWindow
+      visible: root.folderOpen
+      color: "transparent"
+      implicitWidth: folderPopup.width
+      implicitHeight: folderPopup.height
+      anchor {
+        window: dockPanel
+        adjustment: PopupAdjustment.Slide
+        edges: Edges.Top | Edges.Left
+        gravity: Edges.Bottom | Edges.Right
+        rect.x: Math.round(root.folderAnchorX - folderWindow.implicitWidth / 2)
+        rect.y: Math.round(root.folderAnchorY - folderWindow.implicitHeight)
+        rect.width: 1
+        rect.height: 1
+      }
+      DockFolderPopup {
+        id: folderPopup
+        folderPath: root.folderPath
+        title: root.folderTitle
+        textScale: root.textScale
+        accent: root.accent
+        fontFamily: root.fontFamily
+        glassColor: root.glassColor
+        glassOpacity: root.surfaceAlpha
+        maxHeight: Math.max(120, (root.dockScreen ? root.dockScreen.height : 720) - dockPanel.height - 32)
+        onContainsPointerChanged: {
+          if (containsPointer) folderHideTimer.stop()
+          else if (root.folderOpen) folderHideTimer.restart()
+        }
+        onEntryActivated: function(path) { root.closeFolderPopup(); root.openPath(path) }
+        onFolderActivated: function(path) { root.closeFolderPopup(); root.openPath(path) }
+        onDismissed: root.closeFolderPopup()
       }
     }
 
@@ -1660,6 +1877,8 @@ Item {
             accent: root.accent
             fontFamily: root.fontFamily
             tileShape: root.tileShape
+            badgeCount: root.badgesOn ? root.badgeCountFor(modelData, root.badgeMap) : 0
+            badgeUrgent: root.badgesOn && DockModel.hasUrgentWindow(modelData, root.urgentWindows)
             isBeingDragged: root.draggingPinnedIndex === index
             isReordering: root.draggingPinnedIndex >= 0
             dragVisualX: root.draggingPinnedIndex === index ? root.dragVisualX : 0
@@ -1740,6 +1959,8 @@ Item {
             accent: root.accent
             fontFamily: root.fontFamily
             tileShape: root.tileShape
+            badgeCount: root.badgesOn ? root.badgeCountFor(modelData, root.badgeMap) : 0
+            badgeUrgent: root.badgesOn && DockModel.hasUrgentWindow(modelData, root.urgentWindows)
             targetScale: (Array.isArray(root.unpinnedScales) && index < root.unpinnedScales.length) ? root.unpinnedScales[index] : 1.0
             targetOffsetX: (Array.isArray(root.unpinnedOffsets) && index < root.unpinnedOffsets.length) ? root.unpinnedOffsets[index] : 0
 
@@ -1803,6 +2024,8 @@ Item {
             accent: root.accent
             fontFamily: root.fontFamily
             tileShape: root.tileShape
+            badgeCount: root.badgesOn ? root.badgeCountFor(modelData, root.badgeMap) : 0
+            badgeUrgent: root.badgesOn && DockModel.hasUrgentWindow(modelData, root.urgentWindows)
             targetScale: (Array.isArray(root.recentScales) && index < root.recentScales.length) ? root.recentScales[index] : 1.0
             targetOffsetX: (Array.isArray(root.recentOffsets) && index < root.recentOffsets.length) ? root.recentOffsets[index] : 0
 
@@ -1814,6 +2037,50 @@ Item {
             onContextMenuRequested: function(item, srcItem) { root.openContextMenu(item, srcItem) }
             onHovered: function(item, srcItem) { root.requestAppTooltip(item, srcItem) }
             onUnhovered: function(srcItem) { root.releaseAppTooltip(srcItem) }
+          }
+        }
+
+        // Divider before folders and the trash
+        Item {
+          visible: !root.folded
+            && Array.isArray(root.dockData.extras) && root.dockData.extras.length > 0
+            && ((root.dockData.pinned && root.dockData.pinned.length > 0)
+                || (root.dockData.unpinned && root.dockData.unpinned.length > 0)
+                || (root.dockData.recent && root.dockData.recent.length > 0))
+          anchors.verticalCenter: parent.verticalCenter
+          width: root.separatorWidth
+          height: root.iconPixelSize - 6
+          Rectangle { anchors.centerIn: parent; width: 1; height: parent.height; color: Qt.rgba(1, 1, 1, 0.16) }
+        }
+
+        // Folders and the trash
+        Repeater {
+          id: extrasRepeater
+          model: root.dockData.extras || []
+
+          delegate: DockItem {
+            required property var modelData
+            required property int index
+
+            visible: !root.folded
+            itemData: modelData
+            itemIndex: 0
+            baseSize: root.baseIconSize
+            iconSize: root.iconPixelSize
+            isDockHovered: root.isDockHovered
+            magnificationDuration: root.magnificationDuration
+            reduceMotion: root.reduceMotion
+            accent: root.accent
+            fontFamily: root.fontFamily
+            tileShape: root.tileShape
+            targetScale: (Array.isArray(root.extraScales) && index < root.extraScales.length) ? root.extraScales[index] : 1.0
+            targetOffsetX: (Array.isArray(root.extraOffsets) && index < root.extraOffsets.length) ? root.extraOffsets[index] : 0
+
+            onClicked: function(item) { root.openExtra(item) }
+            onPinToggleRequested: function(item) { if (item && item.kind === "folder") root.removeFolder(item.path) }
+            onContextMenuRequested: function(item, srcItem) { root.openContextMenu(item, srcItem) }
+            onHovered: function(item, srcItem) { root.requestExtraHover(item, srcItem) }
+            onUnhovered: function(srcItem) { root.releaseExtraHover(srcItem) }
           }
         }
 

@@ -23,6 +23,12 @@ Item {
   property color accent: Color.accent
   property string fontFamily: Style.font.family
   property string tileShape: "rounded"
+  // Badge: a count reported by the app (Unity LauncherEntry) and/or an
+  // urgent window. Count wins; urgent alone shows a dot.
+  property int badgeCount: 0
+  property bool badgeUrgent: false
+  property real badgeScale: 1
+  readonly property bool badgeVisible: badgeCount > 0 || badgeUrgent
   property real bounceY: 0
   property real pressScale: (mouseArea.pressed && !root.isBeingDragged) ? 0.94 : 1.0
 
@@ -179,6 +185,36 @@ Item {
       fontFamily: root.fontFamily
       shape: root.tileShape
       hovered: root.isHovered
+    }
+
+    // macOS-style badge: red pill with the count at the top-right corner,
+    // or a plain dot when a window is only flagged urgent.
+    Rectangle {
+      id: badge
+      visible: root.badgeVisible
+      readonly property real base: Math.max(12, Math.round(root.iconSize * 0.36 * root.badgeScale))
+      anchors.top: parent.top
+      anchors.right: parent.right
+      anchors.topMargin: -Math.round(base * 0.28)
+      anchors.rightMargin: -Math.round(base * 0.28)
+      height: root.badgeCount > 0 ? base : Math.round(base * 0.7)
+      width: root.badgeCount > 0 ? Math.max(base, badgeLabel.implicitWidth + Math.round(base * 0.5)) : height
+      radius: height / 2
+      color: "#ff3b30"
+      border.width: Math.max(1, Math.round(root.iconSize * 0.045))
+      border.color: Qt.rgba(0.07, 0.08, 0.1, 0.9)
+      scale: visible ? 1 : 0.5
+      Behavior on scale { NumberAnimation { duration: root.reduceMotion ? 0 : 160; easing.type: Easing.OutBack } }
+      Text {
+        id: badgeLabel
+        anchors.centerIn: parent
+        visible: root.badgeCount > 0
+        text: root.badgeCount > 999 ? "999+" : String(root.badgeCount)
+        font.family: root.fontFamily
+        font.pixelSize: Math.max(8, Math.round(badge.base * 0.62))
+        font.weight: Font.Bold
+        color: "#ffffff"
+      }
     }
 
     // Keep hit-testing aligned with the transformed icon. Opening the context
