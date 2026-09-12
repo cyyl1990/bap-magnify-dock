@@ -53,6 +53,7 @@ DockGlass {
     bottomPadding: 6
     elide: Text.ElideRight
     text: (root.title + " — " + root.rows.length + (root.rows.length === 1 ? " window" : " windows")).toUpperCase()
+    textFormat: Text.PlainText
     font.family: root.fontFamily
     font.pixelSize: Math.round(11 * root.textScale)
     font.weight: Font.DemiBold

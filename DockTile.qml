@@ -93,6 +93,7 @@ Item {
       opacity: icon.status === Image.Ready ? 0 : 1
       anchors.centerIn: parent
       text: root.appName.length > 0 ? root.appName.charAt(0).toUpperCase() : "★"
+      textFormat: Text.PlainText
       font.family: root.fontFamily
       font.pixelSize: Math.round(root.size * 0.42)
       font.weight: Font.DemiBold

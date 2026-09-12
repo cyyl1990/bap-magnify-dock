@@ -85,6 +85,7 @@ DockGlass {
       bottomPadding: 7
       elide: Text.ElideRight
       text: root.targetItem ? String(root.targetItem.name || "").toUpperCase() : ""
+      textFormat: Text.PlainText
       font.family: root.fontFamily
       font.pixelSize: Math.round(11 * root.textScale)
       font.weight: Font.DemiBold
@@ -121,6 +122,7 @@ DockGlass {
             anchors.leftMargin: 9
             anchors.verticalCenter: parent.verticalCenter
             text: row.modelData.label || ""
+            textFormat: Text.PlainText
             font.family: root.fontFamily
             font.pixelSize: Math.round(13.5 * root.textScale)
             color: Qt.rgba(1, 1, 1, 0.92)
@@ -130,6 +132,7 @@ DockGlass {
             anchors.rightMargin: 9
             anchors.verticalCenter: parent.verticalCenter
             text: row.modelData.hint || ""
+            textFormat: Text.PlainText
             font.family: root.fontFamily
             font.pixelSize: Math.round(12 * root.textScale)
             color: Qt.rgba(1, 1, 1, 0.92)

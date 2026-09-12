@@ -124,22 +124,28 @@ Remove the drawer keybind from `bindings.lua` if you added one.
 ## Requirements
 
 * Omarchy with omarchy-shell (Quickshell) and Hyprland.
-* `wl-clipboard` for the copy actions in settings.
-* Python 3 and `pactl` for the per-app mute action (upstream's `dock-audio.py`).
+* Python 3, `pactl` and `notify-send` for the per-app mute action (upstream's `dock-audio.py`).
+* `gio` (GLib) for the trash tile's Empty Trash action.
 * Python 3 with GObject introspection (`python-gobject`, present on Omarchy)
   for badges; without it the badge relay simply stays silent.
-* `gio` (GLib) for the trash tile's Empty Trash action.
 
 The plugin makes no network requests. It bundles the Instrument Sans font
 (SIL Open Font License, see `fonts/OFL.txt`).
 
-Everything it runs: `hyprctl` (window focus and close), `uwsm-app`/`gtk-launch`
-(launching apps), `xdg-open` (folders and the trash), `gio trash --empty`
-(only from the trash tile's menu), `pactl` through `dock-audio.py` (mute),
-`python3 dock-badges.py` (a session-bus listener that never writes anything),
-`find` (folder stack listing), `wl-copy` (copying from settings) and
-`gsettings` (reads the reduce-motion preference). It writes only to the two
-config files above, and only on your actions.
+Everything it runs, always by absolute path and never through a shell:
+`/usr/bin/hyprctl` (window focus and close), `/usr/bin/uwsm-app` with
+`/usr/bin/gtk-launch` (launching apps when the shell's own launcher is
+unavailable), `/usr/bin/xdg-open` (folders and the trash), `/usr/bin/gio trash
+--empty` (only from the trash tile's menu), `/usr/bin/pactl`, `/usr/bin/pgrep`
+and `/usr/bin/notify-send` through `dock-audio.py` (mute), `/usr/bin/python3 -I`
+for `dock-badges.py` (a session-bus listener that never writes anything),
+`/usr/bin/find` (folder stack listing and the trash-full check) and
+`/usr/bin/gsettings` (reads the reduce-motion preference).
+
+It writes only the config, presets and muted-apps files named above, only on
+your actions, and always atomically: a random exclusive temp file in the
+verified directory, renamed over the target. Every label that shows an app or
+window name is rendered as plain text.
 
 ## Notes
 

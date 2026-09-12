@@ -655,6 +655,7 @@ DockGlass {
                   id: chipLabel
                   anchors.centerIn: parent
                   text: (chip.added ? "✓ " : "+ ") + chip.modelData
+                  textFormat: Text.PlainText
                   font.family: root.fontFamily
                   font.pixelSize: Math.round(12 * root.textScale)
                   font.weight: Font.Medium
@@ -852,6 +853,7 @@ DockGlass {
                 Text {
                   width: parent.width
                   text: presetRow.modelData.savedAt ? "Saved " + String(presetRow.modelData.savedAt).substring(0, 10) : ""
+                  textFormat: Text.PlainText
                   elide: Text.ElideRight
                   font.family: root.fontFamily
                   font.pixelSize: Math.round(11 * root.textScale)

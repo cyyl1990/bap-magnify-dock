@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3 -I
 """
 dock-audio.py - Per-application audio mute controller for Omarchy macOS Dock
 Interacts with PipeWire / PulseAudio (via pactl) and Hyprland (hyprctl) to
@@ -8,12 +8,38 @@ find audio streams belonging to a dock application and toggle or report mute sta
 import sys
 import os
 import json
+import secrets
+import stat
 import subprocess
 import glob
 import re
 
-CONFIG_DIR = os.path.expanduser("~/.config/omarchy")
-MUTED_FILE = os.path.join(CONFIG_DIR, "dock-muted-apps.json")
+# Tools by absolute path only; nothing is resolved through PATH.
+PGREP = "/usr/bin/pgrep"
+HYPRCTL = "/usr/bin/hyprctl"
+PACTL = "/usr/bin/pactl"
+NOTIFY_SEND = "/usr/bin/notify-send"
+
+CONFIG_DIR = os.path.join(os.environ.get("HOME", ""), ".config/omarchy")
+MUTED_NAME = "dock-muted-apps.json"
+MUTED_FILE = os.path.join(CONFIG_DIR, MUTED_NAME)
+UID = os.getuid()
+
+
+def open_config_dir():
+    """Open the config directory without following symlinks and check ownership."""
+    if not CONFIG_DIR.startswith("/"):
+        return None
+    try:
+        os.makedirs(CONFIG_DIR, mode=0o700, exist_ok=True)
+        fd = os.open(CONFIG_DIR, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError:
+        return None
+    st = os.fstat(fd)
+    if st.st_uid != UID or (st.st_mode & stat.S_IWOTH):
+        os.close(fd)
+        return None
+    return fd
 
 
 def normalize_name(s):
@@ -51,26 +77,53 @@ def stream_pid_of(props):
 
 
 def load_muted_state():
-    if os.path.exists(MUTED_FILE):
-        try:
-            with open(MUTED_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    return data
-        except Exception:
-            pass
-    return {}
+    dfd = open_config_dir()
+    if dfd is None:
+        return {}
+    try:
+        fd = os.open(MUTED_NAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dfd)
+    except OSError:
+        os.close(dfd)
+        return {}
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != UID:
+            return {}
+        with os.fdopen(fd, "r", encoding="utf-8") as f:
+            fd = -1
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        os.close(dfd)
 
 
 def save_muted_state(state):
+    """Descriptor-relative atomic write: random exclusive temp file in the
+    verified directory, fsync, then rename over the target."""
+    dfd = open_config_dir()
+    if dfd is None:
+        sys.stderr.write("Error saving muted state: config directory is not usable\n")
+        return
+    tmp = ".dock-muted-apps." + secrets.token_hex(8) + ".tmp"
     try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        tmp = MUTED_FILE + ".tmp." + str(os.getpid())
-        with open(tmp, "w", encoding="utf-8") as f:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dfd)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)
-        os.replace(tmp, MUTED_FILE)
+            f.flush()
+            os.fsync(f.fileno())
+        os.rename(tmp, MUTED_NAME, src_dir_fd=dfd, dst_dir_fd=dfd)
     except Exception as e:
         sys.stderr.write(f"Error saving muted state: {e}\n")
+        try:
+            os.unlink(tmp, dir_fd=dfd)
+        except OSError:
+            pass
+    finally:
+        os.close(dfd)
 
 
 def get_descendant_pids(pid):
@@ -96,7 +149,7 @@ def get_descendant_pids(pid):
         # Fallback to pgrep if /proc had no entries or empty
         if not child_pids:
             try:
-                out = subprocess.check_output(["pgrep", "-P", str(curr)], text=True, stderr=subprocess.DEVNULL)
+                out = subprocess.check_output([PGREP, "-P", str(curr)], text=True, stderr=subprocess.DEVNULL)
                 for line in out.splitlines():
                     if line.strip():
                         child_pids.add(int(line.strip()))
@@ -111,7 +164,7 @@ def get_descendant_pids(pid):
 
 def get_hyprland_clients():
     try:
-        out = subprocess.check_output(["hyprctl", "clients", "-j"], text=True, stderr=subprocess.DEVNULL)
+        out = subprocess.check_output([HYPRCTL, "clients", "-j"], text=True, stderr=subprocess.DEVNULL)
         return json.loads(out)
     except Exception:
         return []
@@ -119,7 +172,7 @@ def get_hyprland_clients():
 
 def get_sink_inputs():
     try:
-        res = subprocess.run(["pactl", "list", "sink-inputs"], capture_output=True, text=True, timeout=3)
+        res = subprocess.run([PACTL, "list", "sink-inputs"], capture_output=True, text=True, timeout=3)
     except Exception:
         return []
 
@@ -207,7 +260,7 @@ def find_matching_streams(app_id, app_name):
 def notify(title, message, icon="audio-volume-muted"):
     try:
         subprocess.run(
-            ["notify-send", "-a", "Omarchy Dock", "-i", icon, "-u", "low", title, message],
+            [NOTIFY_SEND, "-a", "Omarchy Dock", "-i", icon, "-u", "low", title, message],
             check=False,
             stderr=subprocess.DEVNULL
         )
@@ -250,7 +303,7 @@ def cmd_toggle(app_id, app_name):
         new_val_str = "1" if new_mute_target else "0"
 
         for s in streams:
-            subprocess.run(["pactl", "set-sink-input-mute", s["id"], new_val_str], check=False)
+            subprocess.run([PACTL, "set-sink-input-mute", s["id"], new_val_str], check=False)
         is_muted = new_mute_target
     else:
         is_muted = not saved_muted
@@ -289,7 +342,7 @@ def cmd_mute(app_id, app_name):
     streams = find_matching_streams(app_id, app_name)
     state = load_muted_state()
     for s in streams:
-        subprocess.run(["pactl", "set-sink-input-mute", s["id"], "1"], check=False)
+        subprocess.run([PACTL, "set-sink-input-mute", s["id"], "1"], check=False)
     key = app_id or app_name
     state[key] = True
     if app_name:
@@ -305,7 +358,7 @@ def cmd_unmute(app_id, app_name):
     streams = find_matching_streams(app_id, app_name)
     state = load_muted_state()
     for s in streams:
-        subprocess.run(["pactl", "set-sink-input-mute", s["id"], "0"], check=False)
+        subprocess.run([PACTL, "set-sink-input-mute", s["id"], "0"], check=False)
     key = app_id or app_name
     state.pop(key, None)
     if app_name:
@@ -330,7 +383,7 @@ def cmd_sync():
         streams = find_matching_streams(app_key, app_key)
         for s in streams:
             if not s.get("muted", False):
-                subprocess.run(["pactl", "set-sink-input-mute", s["id"], "1"], check=False)
+                subprocess.run([PACTL, "set-sink-input-mute", s["id"], "1"], check=False)
                 synced_count += 1
     print(json.dumps({"synced": synced_count}))
     return 0

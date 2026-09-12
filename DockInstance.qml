@@ -354,15 +354,16 @@ Item {
   }
 
   // ---- Folder and trash tiles ----
+  // Every external program is started by absolute path with an argv list;
+  // nothing here goes through a shell or the ambient PATH.
   function openExtra(item) {
     if (!item || !item.kind) return
-    if (!Util || typeof Util.execDetached !== "function") return
-    Util.execDetached("xdg-open " + Util.shellQuote(item.kind === "trash" ? "trash:///" : item.path))
+    Quickshell.execDetached(["/usr/bin/xdg-open", item.kind === "trash" ? "trash:///" : String(item.path)])
   }
 
   function openPath(path) {
-    if (!path || !Util || typeof Util.execDetached !== "function") return
-    Util.execDetached("xdg-open " + Util.shellQuote(path))
+    if (!path) return
+    Quickshell.execDetached(["/usr/bin/xdg-open", String(path)])
   }
 
   function removeFolder(path) {
@@ -371,11 +372,10 @@ Item {
   }
 
   function emptyTrash() {
-    if (!Util || typeof Util.execDetached !== "function") return
-    Util.execDetached("gio trash --empty; sleep 0.4")
+    Quickshell.execDetached(["/usr/bin/gio", "trash", "--empty"])
     trashRecheck.restart()
   }
-  Timer { id: trashRecheck; interval: 900; onTriggered: trashProbe.running = true }
+  Timer { id: trashRecheck; interval: 1200; onTriggered: trashProbe.running = true }
 
   function extraMenuEntries(item) {
     if (!item || !item.kind) return null
@@ -534,7 +534,7 @@ Item {
   Process {
     id: reducedMotionProbe
     running: true
-    command: ["gsettings", "get", "org.gnome.desktop.interface", "enable-animations"]
+    command: ["/usr/bin/gsettings", "get", "org.gnome.desktop.interface", "enable-animations"]
     stdout: SplitParser {
       onRead: function(line) {
         root.systemReduceMotion = String(line || "").trim() === "false"
@@ -601,8 +601,7 @@ Item {
       if (appName) next[appName] = true
     }
     root.mutedAppsMap = next
-    var cmd = "python3 " + Util.shellQuote(root.dockAudioScript) + " toggle " + Util.shellQuote(appId) + " " + Util.shellQuote(appName)
-    Util.execDetached(cmd)
+    Quickshell.execDetached(["/usr/bin/python3", "-I", root.dockAudioScript, "toggle", String(appId || ""), String(appName || "")])
   }
 
   // A saved mute must also cover streams that appear after the menu action,
@@ -617,7 +616,7 @@ Item {
 
   Process {
     id: audioSyncProc
-    command: ["python3", root.dockAudioScript, "sync"]
+    command: ["/usr/bin/python3", "-I", root.dockAudioScript, "sync"]
   }
 
   // Badge relay: apps announce unread counts on the session bus through
@@ -625,7 +624,7 @@ Item {
   Process {
     id: badgeRelay
     running: root.badgesOn
-    command: ["python3", root.pluginDir + "/dock-badges.py"]
+    command: ["/usr/bin/python3", "-I", root.pluginDir + "/dock-badges.py"]
     stdout: SplitParser {
       onRead: function(line) {
         try {
@@ -645,12 +644,13 @@ Item {
   // Trash tile: full or empty, polled cheaply and re-checked when the dock is hovered.
   Process {
     id: trashProbe
-    command: ["sh", "-c", "ls -A \"$HOME/.local/share/Trash/files\" 2>/dev/null | head -1 | wc -l"]
-    stdout: SplitParser {
-      onRead: function(line) {
-        var full = parseInt(String(line).trim(), 10) > 0
-        if (full !== root.trashFull) { root.trashFull = full; root.rebuildDock() }
-      }
+    property bool sawEntry: false
+    command: ["/usr/bin/find", root.homeDir + "/.local/share/Trash/files", "-mindepth", "1", "-maxdepth", "1", "-print", "-quit"]
+    onStarted: sawEntry = false
+    stdout: SplitParser { onRead: function(line) { if (String(line).length > 0) trashProbe.sawEntry = true } }
+    onExited: {
+      var full = trashProbe.sawEntry
+      if (full !== root.trashFull) { root.trashFull = full; root.rebuildDock() }
     }
   }
   Timer {
@@ -669,6 +669,7 @@ Item {
     id: configFileView
     path: root.configPath
     watchChanges: true
+    atomicWrites: true
     onFileChanged: reload()
     printErrors: false
     onLoaded: root.loadConfig(text())
@@ -712,12 +713,9 @@ Item {
       pinned: Array.isArray(root.customPinnedApps) ? root.customPinnedApps : DockModel.defaultPinnedApps,
       recent: root.recentIds
     }
-    var jsonStr = JSON.stringify(payload, null, 2)
-    if (Util && typeof Util.execDetached === "function") {
-      var tmpPath = root.configPath + ".tmp." + Date.now()
-      var cmd = "printf '%s\\n' " + Util.shellQuote(jsonStr) + " > " + Util.shellQuote(tmpPath) + " && mv " + Util.shellQuote(tmpPath) + " " + Util.shellQuote(root.configPath)
-      Util.execDetached(cmd)
-    }
+    // Atomic write through Quickshell: a random exclusive temp file next to
+    // the target, renamed over it. No shell, no predictable temp name.
+    configFileView.setText(JSON.stringify(payload, null, 2) + "\n")
   }
 
   // Presets: named snapshots of the whole configuration (settings, auto-hide,
@@ -730,6 +728,7 @@ Item {
     id: presetsFileView
     path: root.presetsPath
     watchChanges: true
+    atomicWrites: true
     onFileChanged: reload()
     printErrors: false
     onLoaded: root.loadPresets(text())
@@ -753,12 +752,7 @@ Item {
 
   function writePresets(list) {
     root.presets = list
-    var jsonStr = JSON.stringify({ version: 1, presets: list }, null, 2)
-    if (Util && typeof Util.execDetached === "function") {
-      var tmpPath = root.presetsPath + ".tmp." + Date.now()
-      var cmd = "printf '%s\\n' " + Util.shellQuote(jsonStr) + " > " + Util.shellQuote(tmpPath) + " && mv " + Util.shellQuote(tmpPath) + " " + Util.shellQuote(root.presetsPath)
-      Util.execDetached(cmd)
-    }
+    presetsFileView.setText(JSON.stringify({ version: 1, presets: list }, null, 2) + "\n")
   }
 
   function findPreset(name) {
@@ -1288,9 +1282,8 @@ Item {
     root.settingsOpen = false
     root.revealDock()
     appDrawer.open = true
-    nudgeTimer.restart()
+    
   }
-  Timer { id: nudgeTimer; interval: 120; onTriggered: root.nudgePointer() }
 
   // `omarchy-shell magnify-dock drawer` toggles the app drawer (bind it to a
   // key); `settings` opens the settings card; `status` reports state.
@@ -1309,15 +1302,6 @@ Item {
     }
   }
 
-  // When the drawer's layer maps and takes keyboard focus, Hyprland stops
-  // treating the dock as the pointer target until the mouse moves, so a
-  // second click on the launcher without moving is lost. Re-issuing the
-  // cursor's own position makes the compositor re-evaluate pointer focus.
-  Process {
-    id: pointerNudge
-    command: ["/usr/bin/bash", "-c", "p=$(hyprctl cursorpos 2>/dev/null | tr -d ' '); [ -n \"$p\" ] && hyprctl dispatch movecursor ${p%,*} ${p#*,} >/dev/null 2>&1"]
-  }
-  function nudgePointer() { if (!pointerNudge.running) pointerNudge.running = true }
 
   DockDrawer {
     id: appDrawer
@@ -1442,6 +1426,7 @@ Item {
           id: tooltipLabel
           anchors.centerIn: parent
           text: root.tooltipText
+          textFormat: Text.PlainText
           font.family: root.fontFamily
           font.pixelSize: Math.round(12.5 * root.textScale)
           font.weight: Font.Medium
@@ -1573,7 +1558,7 @@ Item {
 
         onLaunchClicked: function(item) {
           if (item && !item.isRunning) root.noteLaunch(item)
-          DockModel.handleItemClick(item, Util, root.appLibrary, DesktopEntries)
+          DockModel.handleItemClick(item, Quickshell, root.appLibrary, DesktopEntries)
         }
         onPinToggled: function(item) {
           if (item && item.id) root.togglePinApp(item.id)
@@ -1888,7 +1873,7 @@ Item {
 
             onClicked: function(item) {
               if (item && !item.isRunning) root.noteLaunch(item)
-              DockModel.handleItemClick(item, Util, root.appLibrary, DesktopEntries)
+              DockModel.handleItemClick(item, Quickshell, root.appLibrary, DesktopEntries)
             }
 
             onPinToggleRequested: function(item) {
@@ -1966,7 +1951,7 @@ Item {
 
             onClicked: function(item) {
               if (item && !item.isRunning) root.noteLaunch(item)
-              DockModel.handleItemClick(item, Util, root.appLibrary, DesktopEntries)
+              DockModel.handleItemClick(item, Quickshell, root.appLibrary, DesktopEntries)
             }
 
             onPinToggleRequested: function(item) {
@@ -2031,7 +2016,7 @@ Item {
 
             onClicked: function(item) {
               root.noteLaunch(item)
-              DockModel.handleItemClick(item, Util, root.appLibrary, DesktopEntries)
+              DockModel.handleItemClick(item, Quickshell, root.appLibrary, DesktopEntries)
             }
             onPinToggleRequested: function(item) { if (item && item.id) root.togglePinApp(item.id) }
             onContextMenuRequested: function(item, srcItem) { root.openContextMenu(item, srcItem) }

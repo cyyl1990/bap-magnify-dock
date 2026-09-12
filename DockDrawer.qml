@@ -65,7 +65,7 @@ PanelWindow {
   function launch(app) {
     root.close()
     root.launched(app)
-    DockModel.handleItemClick(app, Util, root.appLibrary, DesktopEntries)
+    DockModel.handleItemClick(app, Quickshell, root.appLibrary, DesktopEntries)
   }
   function close() {
     if (!root.open) return
@@ -274,6 +274,7 @@ PanelWindow {
               horizontalAlignment: Text.AlignHCenter
               elide: Text.ElideRight
               text: cell.modelData.name
+              textFormat: Text.PlainText
               font.family: root.fontFamily
               font.pixelSize: Math.round(12.5 * root.textScale)
               font.weight: Font.Medium
@@ -390,6 +391,7 @@ PanelWindow {
           leftPadding: 14; rightPadding: 14; topPadding: 7; bottomPadding: 5
           elide: Text.ElideRight
           text: root.menuApp ? String(root.menuApp.name || "").toUpperCase() : ""
+          textFormat: Text.PlainText
           font.family: root.fontFamily
           font.pixelSize: Math.round(11 * root.textScale)
           font.weight: Font.DemiBold
@@ -414,6 +416,7 @@ PanelWindow {
               anchors.leftMargin: 9
               anchors.verticalCenter: parent.verticalCenter
               text: menuRow.modelData.label
+              textFormat: Text.PlainText
               font.family: root.fontFamily
               font.pixelSize: Math.round(13.5 * root.textScale)
               color: Qt.rgba(1, 1, 1, 0.92)

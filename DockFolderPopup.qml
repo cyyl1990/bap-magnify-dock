@@ -37,7 +37,7 @@ DockGlass {
     lister.buffer = []
     // Set the command here rather than binding it: a binding may not have
     // re-evaluated yet when this runs from onFolderPathChanged.
-    lister.command = ["find", root.folderPath, "-mindepth", "1", "-maxdepth", "1", "-not", "-name", ".*", "-printf", "%T@\t%y\t%f\n"]
+    lister.command = ["/usr/bin/find", root.folderPath, "-mindepth", "1", "-maxdepth", "1", "-not", "-name", ".*", "-printf", "%T@\t%y\t%f\n"]
     lister.running = true
   }
   onFolderPathChanged: if (visible) refresh()
@@ -76,6 +76,7 @@ DockGlass {
       anchors.verticalCenter: parent.verticalCenter
       elide: Text.ElideRight
       text: root.title.toUpperCase()
+      textFormat: Text.PlainText
       font.family: root.fontFamily
       font.pixelSize: Math.round(11 * root.textScale)
       font.weight: Font.DemiBold

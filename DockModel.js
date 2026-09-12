@@ -532,7 +532,7 @@ function resolveLaunchId(item, desktopEntries) {
   return rawId;
 }
 
-function handleItemClick(item, Util, appLibrary, desktopEntries) {
+function handleItemClick(item, qs, appLibrary, desktopEntries) {
   if (!item) return;
 
   if (item.isRunning && item.windows && item.windows.length > 0) {
@@ -577,8 +577,8 @@ function handleItemClick(item, Util, appLibrary, desktopEntries) {
     } catch (e) {}
   }
 
-  if (Util && typeof Util.execDetached === "function") {
-    Util.execDetached("uwsm-app -- gtk-launch " + Util.shellQuote(launchId + ".desktop"));
+  if (qs && typeof qs.execDetached === "function") {
+    qs.execDetached(["/usr/bin/uwsm-app", "--", "/usr/bin/gtk-launch", launchId + ".desktop"]);
   }
 }
 
