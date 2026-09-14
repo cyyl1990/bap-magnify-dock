@@ -9,10 +9,13 @@ import sys
 import os
 import json
 import secrets
+import select
+import signal
 import stat
 import subprocess
 import glob
 import re
+import time
 
 # Tools by absolute path only; nothing is resolved through PATH.
 PGREP = "/usr/bin/pgrep"
@@ -20,26 +23,115 @@ HYPRCTL = "/usr/bin/hyprctl"
 PACTL = "/usr/bin/pactl"
 NOTIFY_SEND = "/usr/bin/notify-send"
 
-CONFIG_DIR = os.path.join(os.environ.get("HOME", ""), ".config/omarchy")
-MUTED_NAME = "dock-muted-apps.json"
-MUTED_FILE = os.path.join(CONFIG_DIR, MUTED_NAME)
+HOME = os.environ.get("HOME", "")
 UID = os.getuid()
+STATE_DIR_PARTS = (".config", "omarchy")
+MUTED_NAME = "dock-muted-apps.json"
+MAX_STATE_BYTES = 64 * 1024
+MAX_KEYS = 512
+MAX_KEY_LEN = 512
+DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+
+# Output budgets and deadlines for every tool this helper runs.
+T_TOOL = 5
+B_LARGE = 2 * 1024 * 1024   # hyprctl clients -j, pactl list sink-inputs
+B_SMALL = 64 * 1024         # pgrep, pactl set-*, notify-send
 
 
-def open_config_dir():
-    """Open the config directory without following symlinks and check ownership."""
-    if not CONFIG_DIR.startswith("/"):
+
+def private_dir(fd):
+    st = os.fstat(fd)
+    return stat.S_ISDIR(st.st_mode) and st.st_uid == UID and not (st.st_mode & 0o022)
+
+
+def open_state_dir(create=False):
+    """Descriptor for $HOME/.config/omarchy with every component from $HOME
+    down opened O_NOFOLLOW relative to the previous one; $HOME and the two
+    directories below it must be owned by this uid and not group/world
+    writable. Returns None if unusable."""
+    if not HOME.startswith("/") or HOME == "/":
         return None
+    parts = [p for p in HOME.split("/") if p]
     try:
-        os.makedirs(CONFIG_DIR, mode=0o700, exist_ok=True)
-        fd = os.open(CONFIG_DIR, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        fd = os.open("/", DIR_FLAGS)
+        for name in parts:
+            nxt = os.open(name, DIR_FLAGS, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        if not private_dir(fd):
+            os.close(fd)
+            return None
+        for name in STATE_DIR_PARTS:
+            try:
+                nxt = os.open(name, DIR_FLAGS, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    os.close(fd)
+                    return None
+                try:
+                    os.mkdir(name, 0o700, dir_fd=fd)
+                except FileExistsError:
+                    pass
+                nxt = os.open(name, DIR_FLAGS, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+            if not private_dir(fd):
+                os.close(fd)
+                return None
+        return fd
     except OSError:
         return None
-    st = os.fstat(fd)
-    if st.st_uid != UID or (st.st_mode & stat.S_IWOTH):
-        os.close(fd)
-        return None
-    return fd
+
+
+def kill_group(pid):
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(pid, sig)
+        except OSError:
+            return
+        time.sleep(0.2)
+
+
+def run_bounded(cmd, budget=B_SMALL, timeout=T_TOOL):
+    """Run cmd in its own process group; read stdout against a byte budget and
+    a deadline; kill the group on either. Returns (rc, text)."""
+    try:
+        p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, close_fds=True, process_group=0,
+                             env={"HOME": HOME, "PATH": "/usr/bin", "LANG": "C.UTF-8",
+                                  "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", ""),
+                                  "HYPRLAND_INSTANCE_SIGNATURE": os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", ""),
+                                  "WAYLAND_DISPLAY": os.environ.get("WAYLAND_DISPLAY", ""),
+                                  "DBUS_SESSION_BUS_ADDRESS": os.environ.get("DBUS_SESSION_BUS_ADDRESS", ""),
+                                  "PULSE_SERVER": os.environ.get("PULSE_SERVER", "")})
+    except OSError:
+        return 127, ""
+    out = bytearray()
+    fd = p.stdout.fileno()
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            kill_group(p.pid)
+            p.wait(timeout=5)
+            return 124, ""
+        ready, _, _ = select.select([fd], [], [], min(remaining, 0.5))
+        if not ready:
+            continue
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            break
+        out += chunk
+        if len(out) > budget:
+            kill_group(p.pid)
+            p.wait(timeout=5)
+            return 125, ""
+    try:
+        rc = p.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        kill_group(p.pid)
+        rc = 124
+    return rc, bytes(out).decode("utf-8", "replace")
 
 
 def normalize_name(s):
@@ -77,37 +169,51 @@ def stream_pid_of(props):
 
 
 def load_muted_state():
-    dfd = open_config_dir()
+    """Bounded, shape-checked read: regular file, owned by this uid, one link,
+    at most MAX_STATE_BYTES; a JSON object of at most MAX_KEYS string keys
+    mapping to true."""
+    dfd = open_state_dir()
     if dfd is None:
         return {}
     try:
-        fd = os.open(MUTED_NAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dfd)
-    except OSError:
-        os.close(dfd)
-        return {}
-    try:
-        st = os.fstat(fd)
-        if not stat.S_ISREG(st.st_mode) or st.st_uid != UID:
+        try:
+            fd = os.open(MUTED_NAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dfd)
+        except OSError:
             return {}
-        with os.fdopen(fd, "r", encoding="utf-8") as f:
-            fd = -1
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-    finally:
-        if fd >= 0:
+        try:
+            st = os.fstat(fd)
+            if (not stat.S_ISREG(st.st_mode) or st.st_uid != UID or st.st_nlink != 1
+                    or st.st_size > MAX_STATE_BYTES):
+                return {}
+            data = b""
+            while len(data) < st.st_size:
+                chunk = os.read(fd, st.st_size - len(data))
+                if not chunk:
+                    break
+                data += chunk
+        finally:
             os.close(fd)
+        try:
+            parsed = json.loads(data.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        return {k: True for k, v in list(parsed.items())[:MAX_KEYS]
+                if isinstance(k, str) and len(k) <= MAX_KEY_LEN and v is True}
+    finally:
         os.close(dfd)
 
 
 def save_muted_state(state):
     """Descriptor-relative atomic write: random exclusive temp file in the
     verified directory, fsync, then rename over the target."""
-    dfd = open_config_dir()
+    dfd = open_state_dir(create=True)
     if dfd is None:
         sys.stderr.write("Error saving muted state: config directory is not usable\n")
         return
+    state = {k: True for k, v in list(state.items())[:MAX_KEYS]
+             if isinstance(k, str) and len(k) <= MAX_KEY_LEN and v is True}
     tmp = ".dock-muted-apps." + secrets.token_hex(8) + ".tmp"
     try:
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dfd)
@@ -148,13 +254,11 @@ def get_descendant_pids(pid):
                 pass
         # Fallback to pgrep if /proc had no entries or empty
         if not child_pids:
-            try:
-                out = subprocess.check_output([PGREP, "-P", str(curr)], text=True, stderr=subprocess.DEVNULL)
+            rc, out = run_bounded([PGREP, "-P", str(curr)], B_SMALL)
+            if rc == 0:
                 for line in out.splitlines():
-                    if line.strip():
+                    if line.strip().isdigit():
                         child_pids.add(int(line.strip()))
-            except Exception:
-                pass
         for cp in child_pids:
             if cp not in descendants:
                 to_check.append(cp)
@@ -163,22 +267,24 @@ def get_descendant_pids(pid):
 
 
 def get_hyprland_clients():
-    try:
-        out = subprocess.check_output([HYPRCTL, "clients", "-j"], text=True, stderr=subprocess.DEVNULL)
-        return json.loads(out)
-    except Exception:
+    rc, out = run_bounded([HYPRCTL, "clients", "-j"], B_LARGE)
+    if rc != 0:
         return []
+    try:
+        clients = json.loads(out)
+    except ValueError:
+        return []
+    return [c for c in clients if isinstance(c, dict)][:2000] if isinstance(clients, list) else []
 
 
 def get_sink_inputs():
-    try:
-        res = subprocess.run([PACTL, "list", "sink-inputs"], capture_output=True, text=True, timeout=3)
-    except Exception:
+    rc, out = run_bounded([PACTL, "list", "sink-inputs"], B_LARGE)
+    if rc != 0:
         return []
 
     inputs = []
     curr = None
-    for raw_line in res.stdout.splitlines():
+    for raw_line in out.splitlines():
         line = raw_line.strip()
         if line.startswith("Sink Input #"):
             if curr:
@@ -258,14 +364,7 @@ def find_matching_streams(app_id, app_name):
 
 
 def notify(title, message, icon="audio-volume-muted"):
-    try:
-        subprocess.run(
-            [NOTIFY_SEND, "-a", "Omarchy Dock", "-i", icon, "-u", "low", title, message],
-            check=False,
-            stderr=subprocess.DEVNULL
-        )
-    except Exception:
-        pass
+    run_bounded([NOTIFY_SEND, "-a", "Omarchy Dock", "-i", icon, "-u", "low", str(title)[:200], str(message)[:200]], B_SMALL)
 
 
 def cmd_status(app_id, app_name):
@@ -303,7 +402,7 @@ def cmd_toggle(app_id, app_name):
         new_val_str = "1" if new_mute_target else "0"
 
         for s in streams:
-            subprocess.run([PACTL, "set-sink-input-mute", s["id"], new_val_str], check=False)
+            run_bounded([PACTL, "set-sink-input-mute", str(s["id"])[:16], new_val_str], B_SMALL)
         is_muted = new_mute_target
     else:
         is_muted = not saved_muted
@@ -342,7 +441,7 @@ def cmd_mute(app_id, app_name):
     streams = find_matching_streams(app_id, app_name)
     state = load_muted_state()
     for s in streams:
-        subprocess.run([PACTL, "set-sink-input-mute", s["id"], "1"], check=False)
+        run_bounded([PACTL, "set-sink-input-mute", str(s["id"])[:16], "1"], B_SMALL)
     key = app_id or app_name
     state[key] = True
     if app_name:
@@ -358,7 +457,7 @@ def cmd_unmute(app_id, app_name):
     streams = find_matching_streams(app_id, app_name)
     state = load_muted_state()
     for s in streams:
-        subprocess.run([PACTL, "set-sink-input-mute", s["id"], "0"], check=False)
+        run_bounded([PACTL, "set-sink-input-mute", str(s["id"])[:16], "0"], B_SMALL)
     key = app_id or app_name
     state.pop(key, None)
     if app_name:
@@ -383,7 +482,7 @@ def cmd_sync():
         streams = find_matching_streams(app_key, app_key)
         for s in streams:
             if not s.get("muted", False):
-                subprocess.run([PACTL, "set-sink-input-mute", s["id"], "1"], check=False)
+                run_bounded([PACTL, "set-sink-input-mute", str(s["id"])[:16], "1"], B_SMALL)
                 synced_count += 1
     print(json.dumps({"synced": synced_count}))
     return 0

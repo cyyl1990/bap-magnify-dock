@@ -543,23 +543,114 @@ Item {
   }
 
   // Muted Apps State Persistence & Audio Control
-  readonly property string mutedAppsPath: Quickshell.env("HOME") + "/.config/omarchy/dock-muted-apps.json"
   readonly property string dockAudioScript: root.pluginDir + "/dock-audio.py"
   property var mutedAppsMap: ({})
 
-  FileView {
-    id: mutedAppsFileView
-    path: root.mutedAppsPath
-    watchChanges: true
-    onFileChanged: reload()
-    printErrors: false
-    onLoaded: root.loadMutedApps(text())
-    onLoadFailed: root.loadMutedApps("")
+  // ---- State files: every read and write goes through dock-state.py, which
+  // opens $HOME/.config/omarchy component by component without following
+  // symlinks, verifies owner/type/mode on the descriptors, caps sizes and
+  // validates the shape. The shell never reads the files by pathname. ----
+  readonly property string dockStateScript: root.pluginDir + "/dock-state.py"
+  readonly property int stateReadBudget: 1048576
+  property var stateReadQueue: []
+
+  function requestState(which) {
+    if (root.stateReadQueue.indexOf(which) < 0) root.stateReadQueue.push(which)
+    root.pumpStateReads()
   }
+  function pumpStateReads() {
+    if (stateReader.running || root.stateReadQueue.length === 0) return
+    stateReader.which = root.stateReadQueue.shift()
+    stateReader.buf = ""
+    stateReader.overflowed = false
+    stateReader.command = ["/usr/bin/python3", "-I", root.dockStateScript, "read", stateReader.which]
+    stateReader.running = true
+  }
+  function applyState(which, text) {
+    if (which === "config") root.loadConfig(text)
+    else if (which === "presets") root.loadPresets(text)
+    else if (which === "muted") root.loadMutedApps(text)
+  }
+  Process {
+    id: stateReader
+    property string which: ""
+    property string buf: ""
+    property bool overflowed: false
+    stdout: SplitParser {
+      splitMarker: ""
+      onRead: function(chunk) {
+        if (stateReader.overflowed) return
+        if (stateReader.buf.length + String(chunk).length > root.stateReadBudget) {
+          stateReader.overflowed = true
+          console.warn("[magnify-dock] state read exceeded budget; discarding")
+          stateReader.running = false
+          return
+        }
+        stateReader.buf += String(chunk)
+      }
+    }
+    stderr: SplitParser { onRead: function(line) { console.warn("[magnify-dock] dock-state: " + String(line).slice(0, 300)) } }
+    onExited: function(code) {
+      var which = stateReader.which
+      var text = (!stateReader.overflowed && code === 0) ? stateReader.buf : ""
+      stateReader.buf = ""
+      root.applyState(which, text)
+      root.pumpStateReads()
+    }
+  }
+
+  property var stateWriteQueue: ({})
+  function writeState(which, obj) {
+    var q = Object.assign({}, root.stateWriteQueue)
+    q[which] = JSON.stringify(obj)
+    root.stateWriteQueue = q
+    root.pumpStateWrites()
+  }
+  function pumpStateWrites() {
+    if (stateWriter.running) return
+    var keys = Object.keys(root.stateWriteQueue)
+    if (keys.length === 0) return
+    var which = keys[0]
+    stateWriter.payload = root.stateWriteQueue[which]
+    var q = Object.assign({}, root.stateWriteQueue)
+    delete q[which]
+    root.stateWriteQueue = q
+    stateWriter.command = ["/usr/bin/python3", "-I", root.dockStateScript, "write", which]
+    stateWriter.running = true
+  }
+  Process {
+    id: stateWriter
+    property string payload: ""
+    stdinEnabled: true
+    onStarted: { stateWriter.write(stateWriter.payload + "\n"); stateWriter.payload = "" }
+    stderr: SplitParser { onRead: function(line) { console.warn("[magnify-dock] dock-state write: " + String(line).slice(0, 300)) } }
+    onExited: root.pumpStateWrites()
+  }
+
+  // One inotify watcher on the verified directory; each line names a file to re-read.
+  Process {
+    id: stateWatcher
+    running: true
+    command: ["/usr/bin/python3", "-I", root.dockStateScript, "watch"]
+    stdout: SplitParser {
+      onRead: function(line) {
+        var which = String(line).trim()
+        if (which.length > 16) return
+        if (which === "config") configReload.restart()
+        else if (which === "presets") presetsReload.restart()
+        else if (which === "muted") mutedReload.restart()
+      }
+    }
+    onExited: watcherRestart.restart()
+  }
+  Timer { id: watcherRestart; interval: 5000; onTriggered: stateWatcher.running = true }
+  Timer { id: configReload; interval: 150; onTriggered: root.requestState("config") }
+  Timer { id: presetsReload; interval: 150; onTriggered: root.requestState("presets") }
+  Timer { id: mutedReload; interval: 150; onTriggered: root.requestState("muted") }
 
   function loadMutedApps(rawText) {
     try {
-      if (rawText && rawText.trim().length > 0) {
+      if (rawText && rawText.trim().length > 0 && rawText.trim() !== "null") {
         var parsed = JSON.parse(rawText)
         if (parsed && typeof parsed === "object") {
           root.mutedAppsMap = parsed
@@ -625,11 +716,18 @@ Item {
     id: badgeRelay
     running: root.badgesOn
     command: ["/usr/bin/python3", "-I", root.pluginDir + "/dock-badges.py"]
+    property int linesThisMinute: 0
     stdout: SplitParser {
       onRead: function(line) {
+        if (String(line).length > 2048) return
+        if (++badgeRelay.linesThisMinute > 600) {
+          console.warn("[magnify-dock] badge relay is flooding; stopping it for a minute")
+          badgeRelay.running = false
+          return
+        }
         try {
           var msg = JSON.parse(String(line))
-          if (!msg || typeof msg.app !== "string") return
+          if (!msg || typeof msg.app !== "string" || msg.app.length > 256) return
           var next = Object.assign({}, root.badgeMap)
           if (msg.visible && msg.count > 0) next[msg.app] = msg
           else if (msg.urgent) next[msg.app] = msg
@@ -639,7 +737,10 @@ Item {
       }
     }
     onRunningChanged: if (!running) root.badgeMap = ({})
+    onExited: if (root.badgesOn) badgeRestart.restart()
   }
+  Timer { id: badgeRestart; interval: 60000; onTriggered: if (root.badgesOn && !badgeRelay.running) badgeRelay.running = true }
+  Timer { interval: 60000; repeat: true; running: true; onTriggered: badgeRelay.linesThisMinute = 0 }
 
   // Trash tile: full or empty, polled cheaply and re-checked when the dock is hovered.
   Process {
@@ -663,22 +764,11 @@ Item {
   onIsDockHoveredChanged: if (isDockHovered && root.preferences.showTrash === true) trashProbe.running = true
 
   // Settings File Persistence
-  readonly property string configPath: Quickshell.env("HOME") + "/.config/omarchy/dock-pinned-macos.json"
 
-  FileView {
-    id: configFileView
-    path: root.configPath
-    watchChanges: true
-    atomicWrites: true
-    onFileChanged: reload()
-    printErrors: false
-    onLoaded: root.loadConfig(text())
-    onLoadFailed: root.loadConfig("")
-  }
 
   function loadConfig(rawText) {
     try {
-      if (rawText && rawText.trim().length > 0) {
+      if (rawText && rawText.trim().length > 0 && rawText.trim() !== "null") {
         var parsed = JSON.parse(rawText)
         if (parsed.settings && !settingsSaveTimer.running) {
           root.preferences = DockModel.normalizeSettings(parsed.settings)
@@ -715,30 +805,19 @@ Item {
     }
     // Atomic write through Quickshell: a random exclusive temp file next to
     // the target, renamed over it. No shell, no predictable temp name.
-    configFileView.setText(JSON.stringify(payload, null, 2) + "\n")
+    root.writeState("config", payload)
   }
 
   // Presets: named snapshots of the whole configuration (settings, auto-hide,
   // reserve space, pinned apps) kept in their own file so the live config
   // stays small and a preset survives edits to it.
-  readonly property string presetsPath: Quickshell.env("HOME") + "/.config/omarchy/dock-presets.json"
   property var presets: []
 
-  FileView {
-    id: presetsFileView
-    path: root.presetsPath
-    watchChanges: true
-    atomicWrites: true
-    onFileChanged: reload()
-    printErrors: false
-    onLoaded: root.loadPresets(text())
-    onLoadFailed: root.loadPresets("")
-  }
 
   function loadPresets(rawText) {
     var list = []
     try {
-      if (rawText && rawText.trim().length > 0) {
+      if (rawText && rawText.trim().length > 0 && rawText.trim() !== "null") {
         var parsed = JSON.parse(rawText)
         var arr = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.presets) ? parsed.presets : [])
         for (var i = 0; i < arr.length; i++) {
@@ -752,7 +831,7 @@ Item {
 
   function writePresets(list) {
     root.presets = list
-    presetsFileView.setText(JSON.stringify({ version: 1, presets: list }, null, 2) + "\n")
+    root.writeState("presets", { version: 1, presets: list })
   }
 
   function findPreset(name) {
@@ -1323,6 +1402,9 @@ Item {
 
   Component.onCompleted: {
     console.log("Magnify Dock instance ready", root.dockScreen ? root.dockScreen.name : "no-screen")
+    root.requestState("config")
+    root.requestState("presets")
+    root.requestState("muted")
     if (root.appLibrary) root.appLibrary.refreshIcons()
     root.rebuildDock()
   }

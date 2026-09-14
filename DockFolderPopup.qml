@@ -48,8 +48,12 @@ DockGlass {
     property var buffer: []
     property bool rerun: false
     // %T@ mtime, %y type, %f name; newest first, hidden entries skipped.
+    // Bounded: at most 4000 entries of at most 1 KB each; beyond that the
+    // listing is cut off and the process ended.
     stdout: SplitParser {
       onRead: function(line) {
+        if (String(line).length > 1024) return
+        if (lister.buffer.length >= 4000) { lister.running = false; return }
         var parts = String(line).split("\t")
         if (parts.length < 3) return
         lister.buffer.push({ t: parseFloat(parts[0]) || 0, isDir: parts[1] === "d", name: parts.slice(2).join("\t") })

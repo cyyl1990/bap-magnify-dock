@@ -142,10 +142,15 @@ for `dock-badges.py` (a session-bus listener that never writes anything),
 `/usr/bin/find` (folder stack listing and the trash-full check) and
 `/usr/bin/gsettings` (reads the reduce-motion preference).
 
-It writes only the config, presets and muted-apps files named above, only on
-your actions, and always atomically: a random exclusive temp file in the
-verified directory, renamed over the target. Every label that shows an app or
-window name is rendered as plain text.
+All reading and writing of its state files (dock-pinned-macos.json,
+dock-presets.json, dock-muted-apps.json) goes through `dock-state.py`, which
+opens `~/.config/omarchy` one component at a time without following symlinks,
+requires each to be a directory you own that others cannot write, caps file
+sizes, validates the JSON shape, and writes atomically through a random
+exclusive temp file. The mute helper `dock-audio.py` verifies its config
+directory the same way and runs `pgrep`, `hyprctl` and `pactl` in their own
+process groups against output-size and time limits. Every label that shows an
+app or window name is rendered as plain text.
 
 ## Notes
 
