@@ -576,6 +576,19 @@ DockGlass {
             value: root.settings.opacity !== undefined ? String(Number(root.settings.opacity).toString()) : "-1"
             onChosen: (id) => { root.preferenceChanged("opacity", parseFloat(id)) }
           }
+          Item { width: 1; height: 8 }
+          ChoiceRow {
+            width: parent.width
+            label: "Dock shape"
+            options: [
+              { id: "theme", label: "Auto (Theme)" },
+              { id: "rounded", label: "Rounded" },
+              { id: "round", label: "Round" },
+              { id: "square", label: "Square" }
+            ]
+            value: root.settings.dockShape || "rounded"
+            onChosen: (id) => { root.preferenceChanged("dockShape", id) }
+          }
           ToggleRow {
             width: parent.width
             label: "Dock background"

@@ -39,6 +39,17 @@ Item {
   // alpha, 20% is about 0.45. Fully see-through is deliberately not reachable.
   readonly property real _chosenOpacity: (root.preferences.opacity < 0) ? ((Color.background && Color.background.a !== undefined) ? Color.background.a : 1.0) : root.preferences.opacity
   readonly property real surfaceAlpha: Math.sqrt(Math.max(0, Math.min(1, _chosenOpacity)))
+  readonly property string dockShape: root.preferences.dockShape || "rounded"
+  readonly property int capsuleRadius: {
+    var h = root.capsuleHeight
+    if (root.dockShape === "round" || root.dockShape === "pill") return Math.round(h / 2)
+    if (root.dockShape === "square") return 0
+    if (root.dockShape === "theme" || root.dockShape === "auto") {
+      var n = Style.cornerRadius
+      return (typeof n === "number" && isFinite(n) && n >= 0) ? n : 14
+    }
+    return Math.max(14, Math.min(28, Math.round(h * 0.26)))
+  }
   readonly property string tileShape: root.preferences.tileShape || "rounded"
   readonly property real tileRadiusRatio: DockModel.tileRadiusRatio(root.tileShape)
   readonly property bool themeColors: root.preferences.themeColors !== false
@@ -1953,7 +1964,7 @@ Item {
 
       height: root.capsuleHeight
       width: contentRow.width + root.dockPadding * 2 + root.animatedExtraCapsuleWidth
-      radius: 19
+      radius: root.capsuleRadius
       transform: Translate {
         id: capsuleSlide
         y: root.autoHide && !root.dockPresented ? root.capsuleHeight + 30 : 0
@@ -1974,7 +1985,7 @@ Item {
       Rectangle {
         visible: root.showBackground
         anchors.fill: parent
-        radius: 19
+        radius: root.capsuleRadius
         gradient: Gradient {
         GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.14) }
         GradientStop { position: 0.06; color: "transparent" }
