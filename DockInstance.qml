@@ -1947,7 +1947,9 @@ Item {
           anchors.verticalCenterOffset: 4 + index * 2
           width: dockCapsule.width + index * 6
           height: dockCapsule.height + index * 6
-          radius: dockCapsule.radius + index * 3
+          // A square capsule has zero corner radius, so its shadow must stay
+          // sharp too — otherwise soft rounded layers leak out of the corners.
+          radius: root.dockShape === "square" ? 0 : dockCapsule.radius + index * 3
           visible: root.showBackground
           color: Qt.rgba(0, 0, 0, 0.02 * root.surfaceAlpha)
           transform: Translate { y: capsuleSlide.y }
