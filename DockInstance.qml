@@ -508,10 +508,6 @@ Item {
     root.scheduleDockHide()
   }
 
-  onAutoHideChanged: {
-    if (root.autoHide) root.scheduleDockHide()
-    else root.revealDock()
-  }
 
   Timer {
     id: tooltipShowTimer
@@ -542,12 +538,117 @@ Item {
     id: hideDockTimer
     interval: root.preferences.hideDelay
     onTriggered: {
+      if (root.autoHide && root.intelligentAutohide && !root.windowsOverlapDock) {
+        root.syncVisibility()
+        return
+      }
       if (root.autoHide && !root.isDockHovered && !root.edgeHovered && !root.popupOpen) {
         root.clearTooltip()
         root.hoverCursorX = -1
-        root.updateMagnification()
+        if (typeof root.updateMagnification === "function") root.updateMagnification()
+        edgeRevealTimer.stop()
         root.dockPresented = false
       }
+    }
+  }
+
+  Timer {
+    id: debounceOverlapTimer
+    interval: 35
+    repeat: false
+    onTriggered: {
+      if (root.autoHide && root.intelligentAutohide) {
+        if (typeof Hyprland.refreshToplevels === "function") {
+          Hyprland.refreshToplevels()
+        }
+        settleOverlapTimer.restart()
+      }
+    }
+  }
+
+  Timer {
+    id: settleOverlapTimer
+    interval: 25
+    repeat: false
+    onTriggered: root.evaluateOverlap()
+  }
+
+  function evaluateOverlap() {
+      if (!root.autoHide || !root.intelligentAutohide) return
+      var clients = Hyprland.toplevels.values || []
+      var mon = null
+      var dockName = root.dockScreen ? String(root.dockScreen.name || "") : ""
+      if (dockName !== "" && Hyprland.monitors) {
+        var monitors = Hyprland.monitors.values || []
+        for (var m = 0; m < monitors.length; m++) {
+          if (monitors[m] && String(monitors[m].name || "") === dockName) {
+            mon = monitors[m]
+            break
+          }
+        }
+      }
+      if (!mon) mon = Hyprland.focusedMonitor
+      var scale = (mon && mon.scale > 0)
+        ? mon.scale
+        : (root.dockScreen && root.dockScreen.devicePixelRatio ? root.dockScreen.devicePixelRatio : 1.0)
+      var screenLogicalW = (mon && mon.width > 0)
+        ? (mon.width / scale)
+        : (root.dockScreen ? root.dockScreen.width : 1920)
+      var screenLogicalH = (mon && mon.height > 0)
+        ? (mon.height / scale)
+        : (root.dockScreen ? root.dockScreen.height : 1080)
+
+      var cardW = (dockCapsule.width > 0) ? dockCapsule.width + root.dockEdgeMargin * 2 : 320
+      var cardH = (dockCapsule.height > 0) ? dockCapsule.height + root.dockEdgeMargin * 2 : 60
+      var monX = (mon && typeof mon.x === "number") ? mon.x : 0
+      var monY = (mon && typeof mon.y === "number") ? mon.y : 0
+      var dockLeft = monX + (screenLogicalW - cardW) / 2
+      var dockRight = dockLeft + cardW
+      var dockTop = monY + screenLogicalH - cardH
+      var dockBottom = monY + screenLogicalH
+
+      var overlap = false
+      var dockWsId = (mon && mon.activeWorkspace) ? mon.activeWorkspace.id : -1
+
+      for (var i = 0; i < clients.length; i++) {
+        var c = clients[i]
+        var ipc = c.lastIpcObject
+        if (!ipc) continue
+        
+        if (ipc.mapped === false || ipc.hidden) continue
+        
+        var cWsId = (c.workspace && c.workspace.id !== undefined) ? c.workspace.id : (ipc.workspace ? ipc.workspace.id : -1)
+        var isPinned = !!ipc.pinned
+        if (!isPinned && cWsId !== dockWsId) continue
+
+        var at = ipc.at
+        var sz = ipc.size
+        if (!at || !sz || at.length < 2 || sz.length < 2) continue
+
+        var winLeft = at[0]
+        var winTop = at[1]
+        var winRight = at[0] + sz[0]
+        var winBottom = at[1] + sz[1]
+
+        var intersectsX = (winRight > dockLeft) && (winLeft < dockRight)
+        var intersectsY = (winBottom > dockTop) && (winTop < dockBottom)
+
+        if (intersectsX && intersectsY) {
+          overlap = true
+          break
+        }
+      }
+      if (root.windowsOverlapDock !== overlap) root.windowsOverlapDock = overlap
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+        if (!root.autoHide || !root.intelligentAutohide) return
+        var n = event.name || ""
+        if (n === "activewindow" || n === "activewindowv2" || n === "closewindow" || n === "openwindow" || n === "movewindow" || n === "workspace" || n === "windowtitle" || n === "windowtitlev2" || n === "fullscreen" || n === "pin") {
+            debounceOverlapTimer.restart()
+        }
     }
   }
 
