@@ -95,10 +95,9 @@ PanelWindow {
   // the drawer. OnDemand still gives the search field the keyboard on open.
   WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
-  Rectangle {
+  Item {
     id: backdrop
     anchors.fill: parent
-    color: Qt.rgba(root.backdropColor.r, root.backdropColor.g, root.backdropColor.b, root.backdropOpacity)
     opacity: root.open ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutQuad } }
 
@@ -110,11 +109,30 @@ PanelWindow {
 
     Keys.onEscapePressed: { if (root.menuApp) root.closeMenu(); else root.close() }
 
+    Rectangle {
+      id: dialogBox
+      anchors.centerIn: parent
+      width: Math.min(940, parent.width * 0.95)
+      height: Math.min(800, parent.height * 0.85)
+      radius: 24
+      color: Qt.rgba(root.backdropColor.r, root.backdropColor.g, root.backdropColor.b, root.backdropOpacity)
+      border.width: 1
+      border.color: Qt.rgba(1, 1, 1, 0.12)
+      
+      Rectangle {
+        anchors.fill: parent
+        radius: 24
+        gradient: Gradient {
+          GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.08) }
+          GradientStop { position: 0.06; color: "transparent" }
+        }
+      }
+
     // Search
     Rectangle {
       id: searchBox
       anchors.top: parent.top
-      anchors.topMargin: Math.round(parent.height * 0.07)
+      anchors.topMargin: 40
       anchors.horizontalCenter: parent.horizontalCenter
       width: Math.min(560, parent.width * 0.8)
       height: Math.round(54 * Math.max(1, root.textScale))
@@ -201,9 +219,9 @@ PanelWindow {
     Item {
       id: gridArea
       anchors.top: searchBox.bottom
-      anchors.topMargin: Math.round(parent.height * 0.05)
+      anchors.topMargin: 30
       anchors.bottom: parent.bottom
-      anchors.bottomMargin: 24
+      anchors.bottomMargin: 30
       anchors.horizontalCenter: parent.horizontalCenter
       width: Math.min(880, parent.width * 0.92)
       opacity: root.open ? 1 : 0
@@ -351,6 +369,8 @@ PanelWindow {
         color: Qt.rgba(1, 1, 1, 0.45)
       }
     }
+
+    } // end dialogBox
 
     // Ghost of the tile being dragged, following the pointer (clamped to the
     // bottom edge once the pointer is over the dock).
