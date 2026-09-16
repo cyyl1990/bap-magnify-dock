@@ -37,7 +37,8 @@ Item {
   // The opacity slider is mapped through a square-root curve so the low end
   // still leaves the surfaces readable: 100% is solid, 50% is about 0.71
   // alpha, 20% is about 0.45. Fully see-through is deliberately not reachable.
-  readonly property real surfaceAlpha: Math.sqrt(Math.max(0, Math.min(1, root.preferences.opacity)))
+  readonly property real _chosenOpacity: (root.preferences.opacity < 0) ? ((Color.background && Color.background.a !== undefined) ? Color.background.a : 1.0) : root.preferences.opacity
+  readonly property real surfaceAlpha: Math.sqrt(Math.max(0, Math.min(1, _chosenOpacity)))
   readonly property string tileShape: root.preferences.tileShape || "rounded"
   readonly property real tileRadiusRatio: DockModel.tileRadiusRatio(root.tileShape)
   readonly property bool themeColors: root.preferences.themeColors !== false
@@ -55,6 +56,12 @@ Item {
   readonly property bool environmentReduceMotion: {
     var value = String(Quickshell.env("OMARCHY_REDUCE_MOTION") || "").toLowerCase()
     return value === "1" || value === "true" || value === "yes"
+  }
+  property int themeVersion: 0
+  Connections {
+    target: Color
+    function onBackgroundChanged() { root.themeVersion++; root.rebuildDock() }
+    function onAccentChanged() { root.themeVersion++; root.rebuildDock() }
   }
   property bool systemReduceMotion: false
   readonly property bool reduceMotion: root.environmentReduceMotion || root.systemReduceMotion
@@ -1529,6 +1536,7 @@ Item {
 
   DockDrawer {
     id: appDrawer
+    themeVersion: root.themeVersion
     dockScreen: root.dockScreen
     appLibrary: root.appLibrary
     textScale: root.textScale
@@ -2079,6 +2087,7 @@ Item {
           model: root.dockData.pinned
 
           delegate: DockItem {
+            themeVersion: root.themeVersion
             required property var modelData
             required property int index
 
@@ -2161,6 +2170,7 @@ Item {
           model: root.dockData.unpinned
 
           delegate: DockItem {
+            themeVersion: root.themeVersion
             required property var modelData
             required property int index
 
@@ -2226,6 +2236,7 @@ Item {
           model: root.dockData.recent || []
 
           delegate: DockItem {
+            themeVersion: root.themeVersion
             required property var modelData
             required property int index
 
@@ -2275,6 +2286,7 @@ Item {
           model: root.dockData.extras || []
 
           delegate: DockItem {
+            themeVersion: root.themeVersion
             required property var modelData
             required property int index
 

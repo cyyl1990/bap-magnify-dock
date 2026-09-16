@@ -9,6 +9,7 @@ import "DockModel.js" as DockModel
 
 Item {
   id: root
+  property int themeVersion: 0
 
   property var itemData: null
   property int itemIndex: 0
@@ -58,7 +59,7 @@ Item {
   readonly property string appName: root.itemData ? String(root.itemData.name || "") : ""
   readonly property string appIcon: root.itemData ? String(root.itemData.icon || "") : ""
 
-  function resolveIcon(raw) {
+  function resolveIcon(raw, _tv) {
     var str = String(raw || "").trim()
     if (!str) return Quickshell.iconPath("application-x-executable", true)
     if (str.indexOf("file://") === 0 || str.indexOf("image://") === 0) return str
@@ -180,7 +181,7 @@ Item {
       id: iconTile
       anchors.fill: parent
       size: root.iconSize
-      iconSource: root.resolveIcon(root.appIcon)
+      iconSource: root.resolveIcon(root.appIcon, root.themeVersion)
       appName: root.appName
       fontFamily: root.fontFamily
       shape: root.tileShape

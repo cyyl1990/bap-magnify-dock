@@ -562,7 +562,20 @@ DockGlass {
             onChosen: function(id) { root.preferenceChanged("tileShape", id) }
           }
           Item { width: 1; height: 8 }
-          SliderRow { width: parent.width; key: "opacity"; label: "Background opacity"; min: 0.2; max: 1; step: 0.02; fmt: "%" }
+          ChoiceRow {
+            width: parent.width
+            label: "Background opacity"
+            options: [
+              { id: "-1", label: "Auto" },
+              { id: "1", label: "100%" },
+              { id: "0.8", label: "80%" },
+              { id: "0.65", label: "65%" },
+              { id: "0.35", label: "35%" },
+              { id: "0", label: "0%" }
+            ]
+            value: root.settings.opacity !== undefined ? String(Number(root.settings.opacity).toString()) : "-1"
+            onChosen: function(id) { root.preferenceChanged("opacity", parseFloat(id)) }
+          }
           ToggleRow {
             width: parent.width
             label: "Dock background"

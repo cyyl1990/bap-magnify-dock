@@ -54,27 +54,12 @@ Item {
     id: tile
     anchors.fill: parent
     radius: Math.round(root.size * root.radiusRatio)
-    gradient: Gradient {
-      GradientStop { position: 0.0; color: root.hovered ? Qt.lighter(root.tileTop, 1.08) : root.tileTop }
-      GradientStop { position: 1.0; color: root.hovered ? Qt.lighter(root.tileBottom, 1.08) : root.tileBottom }
-    }
-
-    // Inset edge light that follows the rounded shape.
-    Rectangle {
-      anchors.fill: parent
-      radius: parent.radius
-      gradient: Gradient {
-      GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.32) }
-      GradientStop { position: 0.06; color: "transparent" }
-      GradientStop { position: 0.94; color: "transparent" }
-      GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.18) }
-      }
-    }
+    color: "transparent"
 
     Image {
       id: icon
       anchors.centerIn: parent
-      width: Math.round(root.size * root.iconRatio)
+      width: root.size
       height: width
       fillMode: Image.PreserveAspectFit
       source: root.iconSource

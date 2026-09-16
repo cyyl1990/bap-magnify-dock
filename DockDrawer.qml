@@ -26,6 +26,7 @@ PanelWindow {
   // stays visible and clickable while the drawer is open, as in the design.
   property real bottomInset: 0
   property string query: ""
+  property int themeVersion: 0
 
   signal drawerClosed()
   signal pinToggleRequested(var app)
@@ -60,7 +61,7 @@ PanelWindow {
   function closeMenu() { root.menuApp = null }
 
   // Only computed while open: the grid instantiates a tile per app.
-  readonly property var apps: root.open ? DockModel.drawerApps(DesktopEntries, root.appLibrary, Quickshell, root.query) : []
+  readonly property var apps: root.open ? DockModel.drawerApps(DesktopEntries, root.appLibrary, Quickshell, root.query, root.themeVersion) : []
 
   function launch(app) {
     root.close()
