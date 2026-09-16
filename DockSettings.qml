@@ -238,7 +238,7 @@ DockGlass {
       width: parent.width
       options: choiceRow.options
       current: choiceRow.value
-      onChosen: choiceRow.chosen(id)
+      onChosen: (id) => choiceRow.chosen(id)
     }
   }
 
@@ -559,7 +559,7 @@ DockGlass {
             width: parent.width
             options: [{ id: "rounded", label: "Rounded" }, { id: "circle", label: "Circle" }, { id: "square", label: "Square" }]
             current: root.settings.tileShape || "rounded"
-            onChosen: function(id) { root.preferenceChanged("tileShape", id) }
+            onChosen: (id) => { root.preferenceChanged("tileShape", id) }
           }
           Item { width: 1; height: 8 }
           ChoiceRow {
@@ -574,7 +574,7 @@ DockGlass {
               { id: "0", label: "0%" }
             ]
             value: root.settings.opacity !== undefined ? String(Number(root.settings.opacity).toString()) : "-1"
-            onChosen: function(id) { root.preferenceChanged("opacity", parseFloat(id)) }
+            onChosen: (id) => { root.preferenceChanged("opacity", parseFloat(id)) }
           }
           ToggleRow {
             width: parent.width
@@ -619,7 +619,7 @@ DockGlass {
             width: parent.width
             options: [{ id: "all", label: "All" }, { id: "monitor", label: "This monitor" }, { id: "workspace", label: "Workspace" }]
             current: root.settings.windowScope || "all"
-            onChosen: function(id) { root.preferenceChanged("windowScope", id) }
+            onChosen: (id) => { root.preferenceChanged("windowScope", id) }
           }
           SectionTitle { title: "Hover previews" }
           ToggleRow {
@@ -814,7 +814,7 @@ DockGlass {
               { id: "intelligent", label: "Intelligent" },
               { id: "autohide", label: "Auto hide" }
             ]
-            onChosen: root.autoHideModeChosen(id)
+            onChosen: (id) => root.autoHideModeChosen(id)
           }
           ToggleRow {
             width: parent.width
