@@ -43,7 +43,7 @@ Item {
   readonly property real tileRadiusRatio: DockModel.tileRadiusRatio(root.tileShape)
   readonly property bool themeColors: root.preferences.themeColors !== false
   readonly property color dockColor: root.themeColors ? Color.background : (root.preferences.dockColor || "#12141a")
-  readonly property color drawerColor: root.themeColors ? Qt.darker(Color.background, 1.15) : (root.preferences.drawerColor || "#0a0c11")
+  readonly property color drawerColor: root.themeColors ? Color.background : (root.preferences.drawerColor || "#0a0c11")
   // Popups sit a touch lighter than the capsule, as in the design (24,26,33 vs 18,20,26).
   readonly property color glassColor: Qt.lighter(root.dockColor, 1.25)
   readonly property color previewColor: (!root.themeColors && root.preferences.previewColor) ? root.preferences.previewColor : root.glassColor
@@ -1541,7 +1541,7 @@ Item {
     appLibrary: root.appLibrary
     textScale: root.textScale
     fontFamily: root.fontFamily
-    backdropOpacity: root.surfaceAlpha
+    backdropOpacity: Math.min(0.55, root.surfaceAlpha)
     backdropColor: root.drawerColor
     bottomInset: dockPanel.implicitHeight
     pinnedIds: root.dockData.pinned.map(function(p) { return p.id })
