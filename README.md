@@ -21,7 +21,7 @@ design, the drawer, previews, and most settings are new.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/marcho78/omarchy-magnify-dock.git --enable
+omarchy plugin add https://github.com/cyyl1990/bap-magnify-dock.git --enable
 ```
 
 The dock appears at the bottom of every monitor. Right-click the launcher
@@ -37,7 +37,7 @@ so your pinned apps carry over.
 Add this to `~/.config/hypr/bindings.lua` and run `hyprctl reload`:
 
 ```lua
-o.bind("SUPER + A", "App drawer", "omarchy-shell magnify-dock drawer")
+o.bind("SUPER + A", "App drawer", "omarchy-shell bap.magnify-dock drawer")
 ```
 
 Pick any key you like; the command toggles the drawer through the dock's IPC.
@@ -77,7 +77,9 @@ value.
 
 **Windows shown**: all windows, this monitor, or the active workspace.
 
-**Behavior**: auto-hide, reserve space, window previews, recent apps, dock
+**Behavior**: auto-hide (Always show / Intelligent / Auto hide — intelligent
+keeps the dock visible on an empty desktop and hides it only while a window
+overlaps the dock area), reserve space, window previews, recent apps, dock
 background, collapse control.
 
 **Dock items**: recent apps group, badges, trash tile, collapse control, and
@@ -97,24 +99,24 @@ separate from the live config, so you can copy that file to another machine.
 ## IPC
 
 ```bash
-omarchy-shell magnify-dock drawer     # toggle the app drawer
-omarchy-shell magnify-dock settings   # toggle the settings dialog
-omarchy-shell magnify-dock settingsPage presets   # open a page: appearance, colors, windows, items, behavior, presets
-omarchy-shell magnify-dock autoHide   # toggle auto-hide
-omarchy-shell magnify-dock status     # JSON state
-omarchy-shell magnify-dock presets    # names of saved presets
-omarchy-shell magnify-dock savePreset "Work"
-omarchy-shell magnify-dock preset "Work"        # apply
-omarchy-shell magnify-dock deletePreset "Work"
+omarchy-shell bap.magnify-dock drawer     # toggle the app drawer
+omarchy-shell bap.magnify-dock settings   # toggle the settings dialog
+omarchy-shell bap.magnify-dock settingsPage presets   # open a page: appearance, colors, windows, items, behavior, presets
+omarchy-shell bap.magnify-dock autoHide   # toggle auto-hide
+omarchy-shell bap.magnify-dock status     # JSON state
+omarchy-shell bap.magnify-dock presets    # names of saved presets
+omarchy-shell bap.magnify-dock savePreset "Work"
+omarchy-shell bap.magnify-dock preset "Work"        # apply
+omarchy-shell bap.magnify-dock deletePreset "Work"
 ```
 
 Applying a preset from a keybind works the same way as the drawer binding,
-for example `o.bind("SUPER + SHIFT + D", "Dock: work preset", "omarchy-shell magnify-dock preset Work")`.
+for example `o.bind("SUPER + SHIFT + D", "Dock: work preset", "omarchy-shell bap.magnify-dock preset Work")`.
 
 ## Removal
 
 ```bash
-omarchy plugin remove marcho78.magnify-dock
+omarchy plugin remove bap.magnify-dock
 ```
 
 Your pins, settings and presets stay in `~/.config/omarchy/dock-pinned-macos.json`

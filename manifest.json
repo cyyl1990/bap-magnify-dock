@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "marcho78.magnify-dock",
+  "id": "bap.magnify-dock",
   "name": "Magnify Dock",
   "version": "2.0.0",
-  "author": "marcho78",
+  "author": "bap",
   "license": "MIT",
   "description": "Frosted-glass macOS-style dock for Omarchy: pointer magnification wave, launch bounce, drag reordering, window picker with live previews, built-in app drawer, badges, folder and trash tiles, presets, and auto-hide. Redesigned fork of wdg.dock.",
   "kinds": [

@@ -11,7 +11,7 @@ DockGlass {
   id: root
 
   property var settings: ({})
-  property bool isAutoHide: false
+  property string autoHideMode: "always"
   property bool isReserveSpace: true
   property real maxHeight: 620
   property color accent: Color.accent
@@ -24,7 +24,7 @@ DockGlass {
   readonly property string homeDir: Quickshell.env("HOME")
 
   signal preferenceChanged(string key, var value)
-  signal autoHideToggled()
+  signal autoHideModeChosen(string mode)
   signal reserveSpaceToggled()
   signal dismissed()
   signal presetSaved(string name)
@@ -205,6 +205,40 @@ DockGlass {
       anchors.fill: parent
       cursorShape: Qt.PointingHandCursor
       onClicked: toggleRow.toggled()
+    }
+  }
+
+  component ChoiceRow: Column {
+    id: choiceRow
+    property string label: ""
+    property string sub: ""
+    property string value: ""
+    property var options: []
+    signal chosen(string id)
+    spacing: 7
+    topPadding: 6
+    bottomPadding: 4
+    Text {
+      text: choiceRow.label
+      font.family: root.fontFamily
+      font.pixelSize: Math.round(13 * root.textScale)
+      font.weight: Font.Medium
+      color: root.w(0.85)
+    }
+    Text {
+      width: parent.width
+      visible: choiceRow.sub !== ""
+      text: choiceRow.sub
+      wrapMode: Text.WordWrap
+      font.family: root.fontFamily
+      font.pixelSize: Math.round(11.5 * root.textScale)
+      color: root.w(0.42)
+    }
+    Segmented {
+      width: parent.width
+      options: choiceRow.options
+      current: choiceRow.value
+      onChosen: choiceRow.chosen(id)
     }
   }
 
@@ -757,12 +791,17 @@ DockGlass {
           visible: root.page === "behavior"
           width: parent.width
           SectionTitle { title: "Visibility" }
-          ToggleRow {
+          ChoiceRow {
             width: parent.width
             label: "Auto-hide"
-            sub: "Slide off-screen; reveal by touching the bottom edge"
-            on: root.isAutoHide
-            onToggled: root.autoHideToggled()
+            sub: "Intelligent keeps the dock visible on an empty desktop and only hides it while a window overlaps the dock area"
+            value: root.autoHideMode
+            options: [
+              { id: "always", label: "Always show" },
+              { id: "intelligent", label: "Intelligent" },
+              { id: "autohide", label: "Auto hide" }
+            ]
+            onChosen: root.autoHideModeChosen(id)
           }
           ToggleRow {
             width: parent.width
@@ -775,7 +814,7 @@ DockGlass {
           Text {
             width: parent.width
             wrapMode: Text.WordWrap
-            text: "Bind the drawer in ~/.config/hypr/bindings.lua:\no.bind(\"SUPER + A\", \"App drawer\", \"omarchy-shell magnify-dock drawer\")"
+            text: "Bind the drawer in ~/.config/hypr/bindings.lua:\no.bind(\"SUPER + A\", \"App drawer\", \"omarchy-shell bap.magnify-dock drawer\")"
             font.family: root.fontFamily
             font.pixelSize: Math.round(12 * root.textScale)
             lineHeight: 1.25

@@ -135,7 +135,7 @@ def clean_config(v):
     if not isinstance(v, dict):
         return None
     out = {"version": 1, "settings": clean_settings(v.get("settings"))}
-    for key in ("autoHide", "reserveSpace", "collapsed"):
+    for key in ("autoHide", "intelligentAutohide", "reserveSpace", "collapsed"):
         if isinstance(v.get(key), bool):
             out[key] = v[key]
     pins = clean_pins(v.get("pinned"))
@@ -157,7 +157,7 @@ def clean_presets(v):
         entry = {"name": p["name"].strip(), "settings": clean_settings(p.get("settings"))}
         if s(p.get("savedAt"), 40) is not None:
             entry["savedAt"] = p["savedAt"]
-        for key in ("autoHide", "reserveSpace"):
+        for key in ("autoHide", "intelligentAutohide", "reserveSpace"):
             if isinstance(p.get(key), bool):
                 entry[key] = p[key]
         pins = clean_pins(p.get("pinned"))

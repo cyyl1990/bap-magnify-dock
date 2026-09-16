@@ -61,6 +61,18 @@ Item {
 
   // Always visible macOS Mode
   property bool autoHide: false
+  // Intelligent Autohide
+  property bool intelligentAutohide: true
+  property bool windowsOverlapDock: false
+  onAutoHideChanged: Qt.callLater(root.syncVisibility)
+  onIntelligentAutohideChanged: {
+    if (root.intelligentAutohide) debounceOverlapTimer.restart()
+    Qt.callLater(root.syncVisibility)
+  }
+  onWindowsOverlapDockChanged: Qt.callLater(root.syncVisibility)
+  readonly property string autoHideMode: root.autoHide
+    ? (root.intelligentAutohide ? "intelligent" : "autohide")
+    : "always"
   property bool reserveSpace: true
   // Folded down to the launcher and the collapse arrow (persisted).
   property bool collapsed: false
@@ -109,8 +121,15 @@ Item {
   readonly property var activeWorkspace: root.hyprMonitor ? root.hyprMonitor.activeWorkspace : null
   readonly property bool popupOpen: root.contextMenuOpen || root.pickerOpen || root.settingsOpen || appDrawer.open || root.folderOpen
 
-  onActiveWorkspaceChanged: Qt.callLater(root.rebuildDock)
-  onHyprMonitorChanged: Qt.callLater(root.rebuildDock)
+  onActiveWorkspaceChanged: {
+    Qt.callLater(root.rebuildDock)
+    debounceOverlapTimer.restart()
+  }
+  onHyprMonitorChanged: {
+    Qt.callLater(root.rebuildDock)
+    debounceOverlapTimer.restart()
+    root.syncVisibility()
+  }
 
   function changePreference(key, value) {
     var next = Object.assign({}, root.preferences)
@@ -344,13 +363,30 @@ Item {
     root.dockPresented = true
   }
 
-  function scheduleDockHide() {
-    // The edge is only a reveal trigger. Keeping it in this condition can
-    // leave the dock permanently open after the first reveal because a
-    // compositor does not always emit an exit while the input mask changes.
-    if (root.autoHide && !root.isDockHovered && !root.popupOpen) {
+  function syncVisibility() {
+    if (!root.autoHide) {
+      hideDockTimer.stop()
+      edgeRevealTimer.stop()
+      root.dockPresented = true
+      return
+    }
+    if (root.isDockHovered || root.edgeHovered || root.popupOpen) {
+      hideDockTimer.stop()
+      return
+    }
+    if (root.intelligentAutohide && !root.windowsOverlapDock) {
+      hideDockTimer.stop()
+      edgeRevealTimer.stop()
+      root.dockPresented = true
+      return
+    }
+    if (root.dockPresented) {
       hideDockTimer.restart()
     }
+  }
+
+  function scheduleDockHide() {
+    root.syncVisibility()
   }
 
   // ---- Folder and trash tiles ----
@@ -582,14 +618,14 @@ Item {
         if (stateReader.overflowed) return
         if (stateReader.buf.length + String(chunk).length > root.stateReadBudget) {
           stateReader.overflowed = true
-          console.warn("[magnify-dock] state read exceeded budget; discarding")
+          console.warn("[bap.magnify-dock] state read exceeded budget; discarding")
           stateReader.running = false
           return
         }
         stateReader.buf += String(chunk)
       }
     }
-    stderr: SplitParser { onRead: function(line) { console.warn("[magnify-dock] dock-state: " + String(line).slice(0, 300)) } }
+    stderr: SplitParser { onRead: function(line) { console.warn("[bap.magnify-dock] dock-state: " + String(line).slice(0, 300)) } }
     onExited: function(code) {
       var which = stateReader.which
       var text = (!stateReader.overflowed && code === 0) ? stateReader.buf : ""
@@ -623,7 +659,7 @@ Item {
     property string payload: ""
     stdinEnabled: true
     onStarted: { stateWriter.write(stateWriter.payload + "\n"); stateWriter.payload = "" }
-    stderr: SplitParser { onRead: function(line) { console.warn("[magnify-dock] dock-state write: " + String(line).slice(0, 300)) } }
+    stderr: SplitParser { onRead: function(line) { console.warn("[bap.magnify-dock] dock-state write: " + String(line).slice(0, 300)) } }
     onExited: root.pumpStateWrites()
   }
 
@@ -721,7 +757,7 @@ Item {
       onRead: function(line) {
         if (String(line).length > 2048) return
         if (++badgeRelay.linesThisMinute > 600) {
-          console.warn("[magnify-dock] badge relay is flooding; stopping it for a minute")
+          console.warn("[bap.magnify-dock] badge relay is flooding; stopping it for a minute")
           badgeRelay.running = false
           return
         }
@@ -782,6 +818,9 @@ Item {
         if (typeof parsed.autoHide === "boolean") {
           root.autoHide = parsed.autoHide
         }
+        if (typeof parsed.intelligentAutohide === "boolean") {
+          root.intelligentAutohide = parsed.intelligentAutohide
+        }
         if (typeof parsed.reserveSpace === "boolean") {
           root.reserveSpace = parsed.reserveSpace
         }
@@ -798,6 +837,8 @@ Item {
       version: 1,
       settings: root.preferences,
       autoHide: root.autoHide,
+      intelligentAutohide: root.intelligentAutohide,
+      intelligentAutohide: root.intelligentAutohide,
       reserveSpace: root.reserveSpace,
       collapsed: root.collapsed,
       pinned: Array.isArray(root.customPinnedApps) ? root.customPinnedApps : DockModel.defaultPinnedApps,
@@ -850,6 +891,8 @@ Item {
       savedAt: new Date().toISOString(),
       settings: root.preferences,
       autoHide: root.autoHide,
+      intelligentAutohide: root.intelligentAutohide,
+      intelligentAutohide: root.intelligentAutohide,
       reserveSpace: root.reserveSpace,
       pinned: Array.isArray(root.customPinnedApps) ? root.customPinnedApps : DockModel.defaultPinnedApps
     }
@@ -867,6 +910,7 @@ Item {
     settingsSaveTimer.stop()
     root.preferences = DockModel.normalizeSettings(p.settings)
     if (typeof p.autoHide === "boolean") root.autoHide = p.autoHide
+    if (typeof p.intelligentAutohide === "boolean") root.intelligentAutohide = p.intelligentAutohide
     if (typeof p.reserveSpace === "boolean") root.reserveSpace = p.reserveSpace
     if (Array.isArray(p.pinned)) root.customPinnedApps = p.pinned
     root.saveConfig()
@@ -1252,12 +1296,12 @@ Item {
   // Reactive listeners for window and app changes
   Connections {
     target: ToplevelManager.toplevels
-    function onValuesChanged() { root.rebuildDock() }
+    function onValuesChanged() { root.rebuildDock(); debounceOverlapTimer.restart() }
   }
 
   Connections {
     target: ToplevelManager
-    function onActiveToplevelChanged() { root.rebuildDock() }
+    function onActiveToplevelChanged() { root.rebuildDock(); debounceOverlapTimer.restart() }
   }
 
   Connections {
@@ -1364,10 +1408,10 @@ Item {
     
   }
 
-  // `omarchy-shell magnify-dock drawer` toggles the app drawer (bind it to a
+  // `omarchy-shell bap.magnify-dock drawer` toggles the app drawer (bind it to a
   // key); `settings` opens the settings card; `status` reports state.
   IpcHandler {
-    target: "magnify-dock"
+    target: "bap.magnify-dock"
     function drawer(): string { root.toggleDrawer(); return appDrawer.open ? "open" : "closed" }
     function settings(): string { if (root.settingsOpen) root.closeSettings(); else root.openSettings(); return root.settingsOpen ? "open" : "closed" }
     function autoHide(): string { root.autoHide = !root.autoHide; root.saveConfig(); return root.autoHide ? "on" : "off" }
@@ -1377,7 +1421,7 @@ Item {
     function deletePreset(name: string): string { return root.deletePreset(name) ? "deleted" : "no such preset" }
     function presets(): string { return JSON.stringify(root.presets.map(function(p) { return p.name })) }
     function status(): string {
-      return JSON.stringify({ screen: root.dockScreen ? root.dockScreen.name : "", pinned: root.dockData.pinned.length, running: root.dockData.unpinned.length, autoHide: root.autoHide, reserveSpace: root.reserveSpace, drawer: appDrawer.open, settings: root.settingsOpen, opacitySetting: root.preferences.opacity, surfaceAlpha: root.surfaceAlpha, dockHovered: root.isDockHovered })
+      return JSON.stringify({ screen: root.dockScreen ? root.dockScreen.name : "", pinned: root.dockData.pinned.length, running: root.dockData.unpinned.length, autoHide: root.autoHide, autoHideMode: root.autoHideMode, intelligentAutohide: root.intelligentAutohide, windowsOverlapDock: root.windowsOverlapDock, reserveSpace: root.reserveSpace, drawer: appDrawer.open, settings: root.settingsOpen, opacitySetting: root.preferences.opacity, surfaceAlpha: root.surfaceAlpha, dockHovered: root.isDockHovered })
     }
   }
 
@@ -1579,7 +1623,7 @@ Item {
       DockSettings {
         id: settingsPanel
         settings: root.preferences
-        isAutoHide: root.autoHide
+        autoHideMode: root.autoHideMode
         isReserveSpace: root.reserveSpace
         accent: root.accent
         fontFamily: root.fontFamily
@@ -1587,7 +1631,11 @@ Item {
         glassColor: root.glassColor
         maxHeight: Math.max(180, (root.dockScreen ? root.dockScreen.height : 720) - dockPanel.height - 32)
         onPreferenceChanged: function(key, value) { root.changePreference(key, value) }
-        onAutoHideToggled: { root.autoHide = !root.autoHide; root.saveConfig() }
+        onAutoHideModeChosen: function(mode) {
+          root.autoHide = mode !== "always"
+          root.intelligentAutohide = mode === "intelligent"
+          root.saveConfig()
+        }
         onReserveSpaceToggled: { root.reserveSpace = !root.reserveSpace; root.saveConfig() }
         presets: root.presets
         Component.onCompleted: page = root.settingsPage
