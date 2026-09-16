@@ -1,0 +1,20 @@
+#!/bin/sh
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$branch" = "main" ]; then
+  files=$(git diff --cached --name-only | grep -E "DockInstance\.qml|DockModel\.js|DockSettings\.qml")
+  if [ -n "$files" ]; then
+    echo ""
+    echo "⚠  WARNING: You're on 'main' (upstream baseline)."
+    echo "   These files are custom changes — switch to 'custom' branch first:"
+    echo ""
+    echo "     git checkout custom"
+    echo ""
+    echo "   Files staged:"
+    echo "$files" | sed 's/^/     /'
+    echo ""
+    echo "   To proceed anyway: git commit --no-verify"
+    echo ""
+    exit 1
+  fi
+fi
+exit 0
