@@ -1938,7 +1938,7 @@ Item {
           height: dockCapsule.height + index * 6
           radius: dockCapsule.radius + index * 3
           visible: root.showBackground
-          color: Qt.rgba(0, 0, 0, 0.045 * root.surfaceAlpha)
+          color: Qt.rgba(0, 0, 0, 0.02 * root.surfaceAlpha)
           transform: Translate { y: capsuleSlide.y }
         }
       }

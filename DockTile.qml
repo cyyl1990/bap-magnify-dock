@@ -46,7 +46,7 @@ Item {
       width: root.size + index * 3
       height: root.size + index * 3
       radius: Math.round((root.size + index * 3) * root.radiusRatio)
-      color: Qt.rgba(0, 0, 0, 0.045)
+      color: Qt.rgba(0, 0, 0, 0.02)
     }
   }
 
