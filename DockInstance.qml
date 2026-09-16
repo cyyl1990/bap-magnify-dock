@@ -1541,7 +1541,7 @@ Item {
     appLibrary: root.appLibrary
     textScale: root.textScale
     fontFamily: root.fontFamily
-    backdropOpacity: Math.min(0.55, root.surfaceAlpha)
+    backdropOpacity: root.surfaceAlpha
     backdropColor: root.drawerColor
     bottomInset: dockPanel.implicitHeight
     pinnedIds: root.dockData.pinned.map(function(p) { return p.id })

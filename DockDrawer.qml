@@ -117,13 +117,13 @@ PanelWindow {
       radius: 24
       color: Qt.rgba(root.backdropColor.r, root.backdropColor.g, root.backdropColor.b, root.backdropOpacity)
       border.width: 1
-      border.color: Qt.rgba(1, 1, 1, 0.12)
+      border.color: Qt.rgba(1, 1, 1, 0.13)
       
       Rectangle {
         anchors.fill: parent
         radius: 24
         gradient: Gradient {
-          GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.08) }
+          GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.14) }
           GradientStop { position: 0.06; color: "transparent" }
         }
       }
