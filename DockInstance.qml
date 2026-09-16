@@ -26,6 +26,7 @@ Item {
   property real iconPixelSize: root.preferences.iconSize
   property real maxMagnification: root.preferences.magnification
   property real magnifyRadius: root.iconPixelSize * 3.4
+  property real slotStep: root.baseIconSize + root.itemSpacing
   property real dockPadding: DockModel.railPadding
   property real separatorWidth: DockModel.separatorWidth
   property real itemSpacing: root.preferences.spacing
@@ -33,6 +34,13 @@ Item {
   property real dockEdgeMargin: 14
   property real layoutExpansionRatio: 0.82
   property int magnificationDuration: 90
+  readonly property real magnifyGrowth: root.baseIconSize * (root.maxMagnification - 1.0) * root.layoutExpansionRatio
+  readonly property real magnifySlotReach: 1.0
+  readonly property real windowReserve: Math.ceil(root.magnifyGrowth * root.magnifySlotReach)
+  readonly property real dockPanelLength: Math.max(
+    Math.ceil(root.baseIconSize + root.dockPadding * 2),
+    Math.ceil(contentRow.width + root.dockPadding * 2 + root.windowReserve * 2)
+  ) + 8
   readonly property real textScale: root.preferences.textScale || 1
   // The opacity slider is mapped through a square-root curve so the low end
   // still leaves the surfaces readable: 100% is solid, 50% is about 0.71
@@ -1326,7 +1334,7 @@ Item {
     root.launcherScale = DockModel.scaleFromDistance(
       Math.abs(baseCursorX - geo.launcher),
       root.maxMagnification,
-      root.magnifyRadius
+      root.slotStep
     )
 
     // Pinned items scales
@@ -1335,7 +1343,7 @@ Item {
       pScales.push(DockModel.scaleFromDistance(
         Math.abs(baseCursorX - geo.pinned[p]),
         root.maxMagnification,
-        root.magnifyRadius
+        root.slotStep
       ))
     }
     root.pinnedScales = pScales
@@ -1346,7 +1354,7 @@ Item {
       uScales.push(DockModel.scaleFromDistance(
         Math.abs(baseCursorX - geo.unpinned[u]),
         root.maxMagnification,
-        root.magnifyRadius
+        root.slotStep
       ))
     }
     root.unpinnedScales = uScales
@@ -1357,7 +1365,7 @@ Item {
       rScales.push(DockModel.scaleFromDistance(
         Math.abs(baseCursorX - recentCenters[r]),
         root.maxMagnification,
-        root.magnifyRadius
+        root.slotStep
       ))
     }
     root.recentScales = rScales
@@ -1368,7 +1376,7 @@ Item {
       xScales.push(DockModel.scaleFromDistance(
         Math.abs(baseCursorX - extraCenters[x]),
         root.maxMagnification,
-        root.magnifyRadius
+        root.slotStep
       ))
     }
     root.extraScales = xScales
@@ -1581,15 +1589,13 @@ Item {
 
     anchors {
       bottom: true
-      left: true
-      right: true
     }
 
     margins {
       bottom: 0
     }
 
-    implicitWidth: 0
+    implicitWidth: root.dockPanelLength
     implicitHeight: root.capsuleHeight
       + root.dockEdgeMargin
       + Math.ceil(root.iconPixelSize * (root.maxMagnification - 1.0))
@@ -1615,8 +1621,8 @@ Item {
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.bottom: parent.bottom
       width: (!root.autoHide || root.dockPresented)
-        ? (dockCapsule.width + Math.ceil(root.iconPixelSize * (root.maxMagnification - 1.0) * 2) + 8)
-        : (root.autoHide ? (dockCapsule.width + 160) : 0)
+        ? Math.min(dockPanel.width, dockCapsule.width + Math.ceil(root.iconPixelSize * (root.maxMagnification - 1.0) * 2) + 8)
+        : dockPanel.width
       height: (!root.autoHide || root.dockPresented)
         ? (root.capsuleHeight + root.dockEdgeMargin + Math.ceil(root.iconPixelSize * (root.maxMagnification - 1.0)) + 14)
         : (root.autoHide ? 4 : 0)
@@ -1624,6 +1630,45 @@ Item {
 
     mask: Region {
       item: dockHitArea
+    }
+
+    Item {
+      id: revealDot
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.bottom: parent.bottom
+      anchors.bottomMargin: 6
+      width: 12
+      height: 12
+      visible: root.autoHide && !root.dockPresented
+      opacity: root.reduceMotion ? 0.5 : 0
+      scale: root.reduceMotion ? 0.95 : 0.9
+
+      Rectangle {
+        anchors.fill: parent
+        radius: width / 2
+        color: Qt.rgba(1, 1, 1, 0.9 * root.surfaceAlpha)
+      }
+
+      Rectangle {
+        anchors.fill: parent
+        radius: width / 2
+        color: "transparent"
+        border.width: 2
+        border.color: Qt.rgba(1, 1, 1, 0.35)
+      }
+
+      SequentialAnimation on opacity {
+        running: revealDot.visible && !root.reduceMotion
+        loops: Animation.Infinite
+        NumberAnimation { to: 0.9; duration: 800; easing.type: Easing.InOutQuad }
+        NumberAnimation { to: 0.4; duration: 800; easing.type: Easing.InOutQuad }
+      }
+      SequentialAnimation on scale {
+        running: revealDot.visible && !root.reduceMotion
+        loops: Animation.Infinite
+        NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
+        NumberAnimation { to: 0.88; duration: 800; easing.type: Easing.InOutQuad }
+      }
     }
 
     // A separate popup surface can rise above the layer window without being
