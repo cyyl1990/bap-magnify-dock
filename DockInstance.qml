@@ -674,7 +674,7 @@ Item {
     function onRawEvent(event) {
         if (!root.autoHide || !root.intelligentAutohide) return
         var n = event.name || ""
-        if (n === "activewindow" || n === "activewindowv2" || n === "closewindow" || n === "openwindow" || n === "movewindow" || n === "workspace" || n === "windowtitle" || n === "windowtitlev2" || n === "fullscreen" || n === "pin") {
+        if (n === "activewindow" || n === "activewindowv2" || n === "closewindow" || n === "openwindow" || n === "movewindow" || n === "movewindowv2" || n === "changefloatingmode" || n === "workspace" || n === "workspacev2" || n === "windowtitle" || n === "windowtitlev2" || n === "fullscreen" || n === "pin" || n === "activespecial" || n === "togglegroup" || n === "moveintogroup" || n === "moveoutofgroup") {
             debounceOverlapTimer.restart()
         }
     }
