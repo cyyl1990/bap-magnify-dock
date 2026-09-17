@@ -820,10 +820,11 @@ DockGlass {
           ChoiceRow {
             width: parent.width
             label: "Visibility"
-            sub: "Covered keeps the dock visible on an empty desktop and hides it while a window overlaps the area"
+            sub: "Intelligent keeps the dock visible on an empty desktop; Covered hides it all the time"
             value: root.autoHideMode
             options: [
               { id: "always", label: "Always show" },
+              { id: "intelligent", label: "Intelligent" },
               { id: "covered", label: "Covered" }
             ]
             onChosen: (id) => root.autoHideModeChosen(id)

@@ -96,7 +96,7 @@ Item {
     Qt.callLater(root.syncVisibility)
   }
   onWindowsOverlapDockChanged: Qt.callLater(root.syncVisibility)
-  readonly property string autoHideMode: root.autoHide ? "covered" : "always"
+  readonly property string autoHideMode: root.autoHide ? (root.intelligentAutohide ? "intelligent" : "covered") : "always"
   property bool reserveSpace: true
   // Folded down to the launcher and the collapse arrow (persisted).
   property bool collapsed: false
@@ -1800,7 +1800,7 @@ Item {
         onPreferenceChanged: function(key, value) { root.changePreference(key, value) }
         onAutoHideModeChosen: function(mode) {
           root.autoHide = mode !== "always"
-          root.intelligentAutohide = mode === "covered"
+          root.intelligentAutohide = mode === "intelligent"
           root.saveConfig()
         }
         onReserveSpaceToggled: { root.reserveSpace = !root.reserveSpace; root.saveConfig() }
