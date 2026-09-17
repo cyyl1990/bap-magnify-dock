@@ -420,7 +420,11 @@ Item {
   // nothing here goes through a shell or the ambient PATH.
   function openExtra(item) {
     if (!item || !item.kind) return
-    Quickshell.execDetached(["/usr/bin/xdg-open", item.kind === "trash" ? "trash:///" : String(item.path)])
+    if (item.kind === "trash") {
+      Quickshell.execDetached(["/usr/bin/gio", "open", "trash:///"])
+    } else {
+      Quickshell.execDetached(["/usr/bin/xdg-open", String(item.path)])
+    }
   }
 
   function openPath(path) {
